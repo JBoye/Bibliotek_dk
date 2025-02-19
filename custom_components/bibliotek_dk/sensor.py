@@ -43,7 +43,7 @@ async def async_setup_entry(
         # Only run one instance at a time...
         if DOMAIN in hass.data:
             while any(
-                libraryObj.running == True for libraryObj in hass.data[DOMAIN].values()
+                libraryObj.running is True for libraryObj in hass.data[DOMAIN].values()
             ):
                 waitTime = random.randint(5, 10)
                 _LOGGER.debug(
@@ -120,7 +120,7 @@ class LibrarySensor(SensorEntity):
     @property
     def state(self):
         if len(self.myLibrary.user.loans) > 0:
-            if self.myLibrary.user.loans[0].expireDate is not None: # eReolen reservation in Queue
+            if self.myLibrary.user.loans[0].expireDate is not None:  # eReolen reservation in Queue
                 return (
                     self.myLibrary.user.loans[0].expireDate.date() - datetime.now().date()
                 ).days

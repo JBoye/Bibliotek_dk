@@ -4,7 +4,7 @@ from __future__ import annotations
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import entity_registry as er, selector
+from homeassistant.helpers import selector
 from homeassistant import config_entries
 
 from .library_api import Library
@@ -62,8 +62,8 @@ async def validate_input(
     )
 
     # Typecast userId and Pincode to string:
-    data[CONF_USER_ID] = re.sub("\D", "", data[CONF_USER_ID])
-    data[CONF_PINCODE] = re.sub("\D", "", data[CONF_PINCODE])
+    data[CONF_USER_ID] = re.sub(r"\D", "", data[CONF_USER_ID])
+    data[CONF_PINCODE] = re.sub(r"\D", "", data[CONF_PINCODE])
 
     # If there is any other instances of the integration
     if DOMAIN in hass.data:
@@ -77,7 +77,7 @@ async def validate_input(
 
         # If instance is running wait...
         while any(
-            libraryObj.running == True for libraryObj in hass.data[DOMAIN].values()
+            libraryObj.running is True for libraryObj in hass.data[DOMAIN].values()
         ):
             await asyncio.sleep(random.randint(5, 10))
 
@@ -143,7 +143,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             libraries, excLibraries = {}, {}
             if "folk" in librariesJSON.keys():
                 for library in librariesJSON["folk"]:
-                    p = re.compile("^.+?[^\/:](?=[?\/]|$)")
+                    p = re.compile(r"^.+?[^\/:](?=[?\/]|$)")
                     m = p.match(library["registrationUrl"])
                     # Only use libraries NOT using gatewayf
                     if "gatewayf" not in library["registrationUrl"]:
@@ -172,7 +172,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 r.raise_for_status()
 
             except requests.exceptions.HTTPError as err:
-                _LOGGER.error(f"HTTP Error while fetching (%s): {err}",URL_FALLBACK + URL_LOGIN_PAGE)
+                _LOGGER.error(f"HTTP Error while fetching (%s): {err}", URL_FALLBACK + URL_LOGIN_PAGE)
                 # Handle the error as needed, e.g., raise it, log it, or notify the user.
                 return ""
             except requests.exceptions.Timeout:
@@ -182,7 +182,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     "Too many redirects fecthing (%s)", URL_FALLBACK + URL_LOGIN_PAGE
                 )
             except requests.exceptions.RequestException as err:
-                _LOGGER.error(f"Request Exception while fetching (%s): {err}",URL_FALLBACK + URL_LOGIN_PAGE)
+                _LOGGER.error(f"Request Exception while fetching (%s): {err}", URL_FALLBACK + URL_LOGIN_PAGE)
                 return ""
 
             municipality = json.loads(r.text)

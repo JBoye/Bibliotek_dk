@@ -30,14 +30,14 @@ USER_PROFILE = "USER_PROFILE"
 
 #### LINKS TO USER PAGES
 URLS = {
-    DEBTS: "/user/me/status-debts",
-    LOANS: "/user/me/status-loans",
-    LOANS_OVERDUE: "/user/me/status-loans-overdue",
+    DEBTS: "/user/me/fees",
+    LOANS: "/user/me/loans",
+    LOANS_OVERDUE: "/user/me/loans-overdue",
     LOGOUT: "/user/logout",
     LOGOUT_ELIB: "/user/me/logout",
     MY_PAGES: "/user/me/view",
-    RESERVATIONS: "/user/me/status-reservations",
-    RESERVATIONS_READY: "/user/me/status-reservations-ready",
+    RESERVATIONS: "/user/me/reservations",
+    RESERVATIONS_READY: "/user/me/reservations-ready",
     USER_PROFILE: "/user/me/edit",
 }
 
@@ -68,6 +68,7 @@ class Library:
         self, userId: str, pincode: str, host=str, libraryName=None, agency=None
     ) -> None:
 
+        _LOGGER.info(f'{host}, {userId}, {pincode}')
         # Prepare a new session with a random user-agent
         HEADERS["User-Agent"] = random.choice(USER_AGENTS)
         self.session = requests.Session()
@@ -128,6 +129,7 @@ class Library:
             # If payload, use POST
             if payload:
                 r = self.session.post(url, data=payload)
+                _LOGGER.info(f'{url}, {payload}')
 
             # else use GET
             else:
@@ -138,7 +140,7 @@ class Library:
         except requests.exceptions.HTTPError as err:
             _LOGGER.error(f"HTTP Error while fetching {url}: {err}")
             # Handle the error as needed, e.g., raise it, log it, or notify the user.
-            return None if return_r else None, None 
+            return None if return_r else None, None
         except requests.exceptions.Timeout:
             _LOGGER.error("Timeout fecthing (%s)", url)
             return None if return_r else None, None
@@ -179,9 +181,10 @@ class Library:
         d, m, y = date
 
         # Check that there actually is a date
-        _LOGGER.debug("Day (%s) is numeric: (%s)",d,d.split(".")[0].isnumeric())
-        if not d.split(".")[0].isnumeric(): return None
-        
+        _LOGGER.debug("Day (%s) is numeric: (%s)", d, d.split(".")[0].isnumeric())
+        if not d.split(".")[0].isnumeric():
+            return None
+
         # Cut the name of the month to the first 3 chars
         m = m[:3]
         # Change the few danish month to english
@@ -230,7 +233,7 @@ class Library:
     def _getIdInfo(self, material) -> tuple:
         try:
             value = material.input["value"]
-            renewAble = not "disabled" in material.input.attrs
+            renewAble = "disabled" not in material.input.attrs
         except (AttributeError, KeyError) as err:
             _LOGGER.error(
                 "Error in getting the Id and renewable on the material. Error: (%s)",
@@ -316,7 +319,8 @@ class Library:
         soup, r = self._fetchPage(url=self.host, return_r=True)
         if r.status_code == 200:
 
-            self.loggedIn = self._titleInSoup(soup, LOGGED_IN)
+#            self.loggedIn = self._titleInSoup(soup, LOGGED_IN)
+            self.loggedIn = self._logged_in(soup)
             # Retrieve the name of the Library from the title tag
             # <title>Faaborg-Midtfyn Bibliotekerne | | Logget ind</title>
             try:
@@ -352,6 +356,7 @@ class Library:
                 # Send the payload as POST and prepare a new soup
                 # Use the URL from the response since we have been directed
                 soup = self._fetchPage(form["action"].replace("/login", r.url), payload)
+
             except (AttributeError, KeyError) as err:
                 _LOGGER.error(
                     "Error processing the <form> tag and subtags (%s). Error: (%s)",
@@ -360,12 +365,19 @@ class Library:
                 )
 
             # Set loggedIn
-            self.loggedIn = self._titleInSoup(soup, LOGGED_IN)
+#            self.loggedIn = self._titleInSoup(soup, LOGGED_IN)
+            self.loggedIn = self._logged_in(soup)
 
         if DEBUG:
             _LOGGER.debug("(%s) is logged in: %s", self.user.userId[:-4], self.loggedIn)
 
         return self.loggedIn
+
+    def _logged_in(self, soup):
+        if soup.body.has_attr('class'):
+            if set(soup.body['class']).intersection({'logged-in', 'user-logged-in'}):
+                return True
+        return False
 
     def login_eLib(self) -> tuple:
         # Make sure we are logged OUT
@@ -376,7 +388,8 @@ class Library:
         # Test if we are logged in at eReolen.dk
         soup, r = self._fetchPage(url=self.host_elib, return_r=True)
         if r.status_code == 200:
-            self.eLoggedIn = self._titleInSoup(soup, LOGGED_IN_ELIB)
+#            self.eLoggedIn = self._titleInSoup(soup, LOGGED_IN_ELIB)
+            self.eLoggedIn = self._logged_in(soup)
 
         if not self.loggedIn:
             soup, r = self._fetchPage(
@@ -395,9 +408,10 @@ class Library:
                 soup = self._fetchPage(
                     soup.form["action"].replace("/login", r.url), payload
                 )
-                self.loggedIn = (
-                    soup if self._titleInSoup(soup, LOGGED_IN_ELIB) else False
-                )
+                self.LoggedIn = self._logged_in(soup)
+#                self.loggedIn = (
+#                    soup if self._titleInSoup(soup, LOGGED_IN_ELIB) else False
+#                )
             except (AttributeError, KeyError) as err:
                 _LOGGER.error(
                     "Error processing the <form> tag and subtags (%s). Error: (%s)",
@@ -566,7 +580,7 @@ class Library:
 
         tempList = []
         # From the <div> with containg the class of the materials
-        _LOGGER.debug("Number of divs (%s): (%d)",DIVS[RESERVATIONS],len(soup.select("."+DIVS[RESERVATIONS])))
+        _LOGGER.debug("Number of divs (%s): (%d)", DIVS[RESERVATIONS], len(soup.select("."+DIVS[RESERVATIONS])))
         for material in self._getMaterials(soup.find_all("div", class_=DIVS[RESERVATIONS])[len(soup.select("."+DIVS[RESERVATIONS]))-1]):
             # Create a instance of libraryReservation
             obj = libraryReservation()
