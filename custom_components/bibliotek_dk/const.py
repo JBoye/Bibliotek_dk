@@ -23,13 +23,19 @@ HEADERS = {
     "Referer": "https://www.google.dk/",
 }
 
+JSON_HEADERS = {
+    "Accept-Encoding": "gzip, deflate, br, zstd",
+    "Content-Type": "application/json",
+    'Accept': '*/*',
+}
+
 MUNICIPALITY_LOOKUP_URL = "https://api.dataforsyningen.dk/kommuner/reverse?x=LON&y=LAT"
 
 UPDATE_INTERVAL = 60
-URL_FALLBACK = "https://fmbib.dk"
+URL_FALLBACK = "https://bibliotek.kk.dk"
 URL_LOGIN = "/login"
 URL_LOGIN_PAGE = "/login?current-path=/user/me/dashboard"
-URL_LOGIN_PAGE_ELIB = "/adgangsplatformen/login?destination=/user"
+ICON = "https://bibliotek.dk/icons/logo.svg"
 USER_AGENTS = [
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:77.0) Gecko/20100101 Firefox/77.0",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:77.0) Gecko/20100101 Firefox/77.0",

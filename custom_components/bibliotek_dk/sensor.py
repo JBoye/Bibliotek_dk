@@ -141,20 +141,14 @@ class LibrarySensor(SensorEntity):
             "mail": self.myLibrary.user.mail,
             "mail_notifications": self.myLibrary.user.mailNotify,
             "pickup_library": self.myLibrary.user.pickupLibrary,
+            "ebooks": self.myLibrary.user.eBooks,
+            "ebooks_quota": self.myLibrary.user.eBooksQuota,
+            "audiobooks": self.myLibrary.user.audioBooks,
+            "audiobooks_quota": self.myLibrary.user.audioBooksQuota,
             "sensor_type": "main",
             ATTR_UNIT_OF_MEASUREMENT: "days",
             ATTR_ATTRIBUTION: CREDITS,
         }
-        # If agency is set, bring eReolen
-        if self.myLibrary.agency:
-            attr.update(
-                {
-                    "ebooks": self.myLibrary.user.eBooks,
-                    "ebooks_quota": self.myLibrary.user.eBooksQuota,
-                    "audiobooks": self.myLibrary.user.audioBooks,
-                    "audiobooks_quota": self.myLibrary.user.audioBooksQuota,
-                }
-            )
 
         # PNG as icon/entity-picture
         if self.myLibrary.icon:

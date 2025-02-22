@@ -54,13 +54,6 @@ async def validate_input(
         data[CONF_UPDATE_INTERVAL] if data[CONF_UPDATE_INTERVAL] else UPDATE_INTERVAL
     )
 
-    # Add agency for ereolen.dk if boolean is set
-    data[CONF_AGENCY] = (
-        libraries[data[CONF_MUNICIPALITY]][CONF_AGENCY]
-        if data[CONF_SHOW_E_LIBRARY]
-        else None
-    )
-
     # Typecast userId and Pincode to string:
     data[CONF_USER_ID] = re.sub(r"\D", "", data[CONF_USER_ID])
     data[CONF_PINCODE] = re.sub(r"\D", "", data[CONF_PINCODE])

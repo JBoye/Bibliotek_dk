@@ -1,60 +1,20 @@
 from __future__ import annotations
 
 from bs4 import BeautifulSoup as BS
-from datetime import datetime
+from dateutil import parser
 import logging
 import random
 import re
 import requests
+import json
 
 from .const import (
-    CONF_AGENCY,
-    HEADERS,
-    URL_LOGIN_PAGE,
-    URL_LOGIN_PAGE_ELIB,
+    HEADERS, JSON_HEADERS,
+    URL_LOGIN_PAGE, ICON,
     USER_AGENTS,
 )
-
 DEBUG = True
 
-#### KEYS
-DEBTS = "DEBTS"
-LOANS = "LOANS"
-LOANS_OVERDUE = "LOANS_OVERDUE"
-LOGOUT = "LOGOUT"
-LOGOUT_ELIB = "LOGOUT_ELIB"
-MY_PAGES = "MY_PAGES"
-RESERVATIONS = "RESERVATIONS"
-RESERVATIONS_READY = "RESERVATIONS_READY"
-USER_PROFILE = "USER_PROFILE"
-
-#### LINKS TO USER PAGES
-URLS = {
-    DEBTS: "/user/me/fees",
-    LOANS: "/user/me/loans",
-    LOANS_OVERDUE: "/user/me/loans-overdue",
-    LOGOUT: "/user/logout",
-    LOGOUT_ELIB: "/user/me/logout",
-    MY_PAGES: "/user/me/view",
-    RESERVATIONS: "/user/me/reservations",
-    RESERVATIONS_READY: "/user/me/reservations-ready",
-    USER_PROFILE: "/user/me/edit",
-}
-
-### IDENTIFIERS FOR CONTENT DIVS
-DIVS = {
-    DEBTS: "pane-debts",
-    LOANS: "pane-loans",
-    LOANS_OVERDUE: "pane-loans",
-    RESERVATIONS: "pane-reservations",
-    RESERVATIONS_READY: "pane-reservations",
-}
-
-#### SEARCH STRINGS
-LOGGED_IN = "logget ind"
-LOGGED_IN_ELIB = "Logged-in"
-EBOOKS = "ebøger"
-AUDIO_BOOKS = "lydbøger"
 
 _LOGGER: logging.Logger = logging.getLogger(__package__)
 _LOGGER = logging.getLogger(__name__)
@@ -65,66 +25,55 @@ class Library:
     loggedIn, eLoggedIn, running = False, False, False
 
     def __init__(
-        self, userId: str, pincode: str, host=str, libraryName=None, agency=None
+        self, userId: str, pincode: str, host=str, libraryName=None
     ) -> None:
 
         _LOGGER.info(f'{host}, {userId}, {pincode}')
         # Prepare a new session with a random user-agent
-        HEADERS["User-Agent"] = random.choice(USER_AGENTS)
+#        HEADERS["User-Agent"] = random.choice(USER_AGENTS)
+#        _LOGGER.info(HEADERS["User-Agent"])
+
         self.session = requests.Session()
         self.session.headers = HEADERS
+        self.json_header = JSON_HEADERS.copy()
+        self.json_header["Origin"] = host
+        self.json_header["Referer"] = host
+        self.access_token = ''
+        self.library_token = ''
+        self.loggedIn = False
 
         self.host = host
-        self.host_elib = "https://ereolen.dk"
         self.user = libraryUser(userId=userId, pincode=pincode)
         self.municipality = libraryName
-        self.agency = agency
+        self.icon = ICON
 
     # The update function is called from the coordinator from Home Assistant
     def update(self):
-        _LOGGER.debug("Updating (%s)", self.user.userId[:-4])
+        _LOGGER.debug(f"Updating ({self.user.userId[:-4]})")
 
         # Only one user can login at the time.
         self.running = True
-
         if self.login():
             # Only fetch user info once
             if not self.user.name:
                 self.fetchUserInfo()
 
             # Fetch the states of the user
-            self.user.loans = self.fetchLoans()
-            self.user.loansOverdue = self.fetchLoansOverdue()
-            self.user.reservations = self.fetchReservations()
-            self.user.reservationsReady = self.fetchReservationsReady()
-            self.user.debts, self.user.debtsAmount = self.fetchDebts()
+            self.fetchLoans()
+            self.fetchReservations()
+#            self.user.debts, self.user.debtsAmount = self.fetchDebts()
 
             # Logout
             self.logout()
 
-            # eReolen
-            if self.municipality and self.agency:
-                loginResult, soup = self.login_eLib()
-                if loginResult:
-                    if soup:
-                        self.fecthELibUsedQuota(soup)
-                        self.user.loans.extend(self.fetchLoans(soup))
-                        self.user.reservations.extend(self.fetchReservations(soup))
-                        self.user.reservationsReady.extend(self.fetchReservationsReady(soup))
-
-                    # Logout of eReolen
-                    self.logout(self.host_elib + URLS[LOGOUT_ELIB])
-
             # Sort the lists
             self.sortLists()
-
         self.running = False
-
         return True
 
     #### PRIVATE BEGIN ####
     # Retrieve a webpage with either GET/POST
-    def _fetchPage(self, url=str, payload=None, return_r=False) -> BS | tuple:
+    def _fetchPage(self, url=str, payload=None, return_r=False):
         try:
             # If payload, use POST
             if payload:
@@ -157,52 +106,6 @@ class Library:
         # Return HTML soup
         return BS(r.text, "html.parser")
 
-    # Search for given string in the HTML soup
-    def _titleInSoup(self, soup, string) -> bool:
-        try:
-            result = string.lower() in soup.title.string.lower()
-        except (AttributeError, KeyError) as err:
-            _LOGGER.error(
-                "Error in finding (%s) in the title of the page. Error: (%s)",
-                string.lower(),
-                err,
-            )
-        return result
-
-    # Convert ex. "22. maj 2023 [23:12:45]" to a datetime object
-    def _getDatetime(self, date, a_format="%d. %b %Y") -> datetime:
-        # Split the string by the " "
-        date = date.split(" ")
-
-        # Extract time if present (ebooks etc.)
-        t = date.pop() if len(date) == 4 else None
-
-        # Unpack into separate elements
-        d, m, y = date
-
-        # Check that there actually is a date
-        _LOGGER.debug("Day (%s) is numeric: (%s)", d, d.split(".")[0].isnumeric())
-        if not d.split(".")[0].isnumeric():
-            return None
-
-        # Cut the name of the month to the first 3 chars
-        m = m[:3]
-        # Change the few danish month to english
-        key = m.lower()
-        if key == "maj":
-            m = "may"
-        elif key == "okt":
-            m = "oct"
-
-        # Create a datetime with the date
-        date = datetime.strptime(f"{d} {m} {y}", a_format)
-        # If Time is present, add it to the date
-        if t:
-            h, m, s = t.split(":")
-            return date.replace(hour=int(h), minute=int(m), second=int(s))
-        # Return the date
-        return date
-
     def sortLists(self):
         # Sort the loans by expireDate and the Title
         self.user.loans.sort(key=lambda obj: (obj.expireDate is None, obj.expireDate, obj.title))
@@ -219,17 +122,6 @@ class Library:
         # Sort the reservations
         self.user.reservationsReady.sort(key=lambda obj: (obj.pickupDate is None, obj.pickupDate, obj.title))
 
-    def _getMaterials(self, soup, noodle="div[class*='material-item']") -> BS:
-        try:
-            result = soup.select(noodle)
-        except (AttributeError, KeyError) as err:
-            _LOGGER.error(
-                "Error in getting the <div> with this noodle (%s). Error: (%s)",
-                noodle,
-                err,
-            )
-        return result
-
     def _getIdInfo(self, material) -> tuple:
         try:
             value = material.input["value"]
@@ -241,70 +133,40 @@ class Library:
             )
         return value, renewAble
 
-    def _getMaterialUrls(self, material) -> tuple:
-        return (
-            self.host + material.a["href"] if material.a else "",
-            material.img["src"] if material.img else "",
-        )
+    def _getCoverUrl(self, id, typ='pid'):
+        header = {**self.json_header, **{'Authorization': f'Bearer {self.library_token}', 'Accept': '*/*'}}
+        res = self.session.get('https://cover.dandigbib.org/api/v2/covers',
+                               params={'type': typ, 'identifiers': id, 'sizes': 'small'},
+                               headers=header
+                               )
+        if res.status_code == 200:
+            return res.json()[0]['imageUrls']['small']['url']
+        return ''
 
-    def _getMaterialInfo(self, material) -> tuple:
-        materialTitle, materialCreators, materialType = "", "", ""
-        # Some title have the type in "()", remove it
-        # by splitting the string by the first "(" and use
-        # only the first element, stripping whitespaces
-        materialTitle = material.select_one("[class*='item-title']")
-        try:
-            if materialTitle:
-                materialTitle = materialTitle.string
-            if materialTitle and "(" in materialTitle:
-                materialTitle = materialTitle.split("(")[0].strip()
-        except (AttributeError, KeyError) as err:
-            _LOGGER.error("Error searching for the title. Error: %s", err)
+    def _branchName(self, id):
+        id = str(id).split('-')[-1]
+        params = {
+            'query': '\n query LibraryFragmentsSearch($q: String, $limit: PaginationLimitScalar, $offset: Int, $language: LanguageCodeEnum, $agencyId: String, $agencyTypes: [AgencyTypeEnum!]) {\n branches(q: $q, agencyid: $agencyId, language: $language, limit: $limit, offset: $offset, bibdkExcludeBranches:true, statuses:AKTIVE, agencyTypes: $agencyTypes) {\n hitcount\n result {\n agencyName\n agencyId\n branchId\n name }\n }\n }',
+            'variables': {'language': "DA", 'limit': 2, 'q': id}
+        }
+        header = {**self.json_header, **{'Authorization': f'Bearer {self.access_token}', 'Accept': '*/*'}}
+        res = self.session.post('https://fbi-api.dbc.dk/bibdk21/graphql', headers=header, data=json.dumps(params))
+        if res.status_code == 200:
+            data = res.json()['data']['branches']
+            if data['hitcount'] == 1:
+                return data['result'][0]['name']
+        return id
 
-        # Assume it is a physical loan
-        materialType = material.select_one("div[class=item-material-type]")
-        try:
-            if materialType:
-                materialType = materialType.string
-            # Ok, maybe it is a digital
-            else:
-                materialType = material.select_one("span[class*='icon']")
-                if materialType:
-                    result = re.search(
-                        "This material is a (.+?) and", materialType["aria-label"]
-                    )
-                    # Yes, it is a digital
-                    if result:
-                        materialType = result.group(1)
-                # I have no idea...
-                else:
-                    materialType = ""
-        except (AttributeError, KeyError) as err:
-            _LOGGER.error("Error in getting the materialType. Error: (%s)", err)
-
-        materialCreators = material.select_one("div[class=item-creators]")
-        try:
-            materialCreators = materialCreators.string if materialCreators else ""
-        except (AttributeError, KeyError) as err:
-            _LOGGER.error("Error in getting the materialCreators. Error: (%s)", err)
-
-        return materialTitle, materialCreators, materialType
-
-    # Loop <li>
-    # (re)Join the class(es) with a " ", use as key
-    def _getDetails(self, material):
-        details = {}
-        try:
-            for li in material.find_all("li"):
-                details[" ".join(li["class"])] = li.select_one(
-                    "div[class=item-information-data]"
-                ).string
-        except (AttributeError, KeyError) as err:
-            _LOGGER.error(
-                "Error in getting the Details of af material. Error: (%s)", err
-            )
-
-        return details.items()
+    def _getDetails(self, faust):
+        data = {}
+        params = {
+            "query": "\n    query getManifestationViaMaterialByFaust($faust: String!) {\n  manifestation(faust: $faust) {\n    ...ManifestationBasicDetails\n  }\n}\n    \n    fragment ManifestationBasicDetails on Manifestation {\n  ...WithLanguages\n  pid\n  titles {\n    full\n  }\n  abstract\n  materialTypes {\n    materialTypeSpecific {\n      display\n    }\n  }\n  creators {\n    display\n  }\n  edition {\n    publicationYear {\n      display\n    }\n  }\n  series {\n    title\n    members {\n      numberInSeries\n    }\n  }\n}\n    \n    fragment WithLanguages on Manifestation {\n  languages {\n    main {\n      display\n      isoCode\n    }\n  }\n}\n    ",
+            "variables": {"faust": faust}
+        }
+        res = self.session.post("https://temp.fbi-api.dbc.dk/next-present/graphql", headers=self.json_header, data=json.dumps(params))
+        if res.status_code == 200:
+            data = res.json()['data']['manifestation']
+        return data
 
     def _removeCurrency(self, amount) -> float:
         result = re.search(r"(\d*\,\d*)", amount)
@@ -312,33 +174,16 @@ class Library:
             amount = float(result.group(1).replace(",", "."))
         return amount
 
-    ####  PRIVATE END  ####
+    # PRIVATE END  ####
+
     def login(self):
-
-        # Test if we are logged in by fetching the main page
-        soup, r = self._fetchPage(url=self.host, return_r=True)
-        if r.status_code == 200:
-
-#            self.loggedIn = self._titleInSoup(soup, LOGGED_IN)
-            self.loggedIn = self._logged_in(soup)
-            # Retrieve the name of the Library from the title tag
-            # <title>Faaborg-Midtfyn Bibliotekerne | | Logget ind</title>
-            try:
-                self.libraryName = soup.title.string.split("|")[0].strip()
-            except (AttributeError, KeyError) as err:
-                _LOGGER.error(
-                    "Error in getting the title of the page (%s). Error: (%s)",
-                    self.host,
-                    err,
-                )
-
-            # Fetch the icon of the library
-            self.icon = soup.select_one("link[rel*='icon']")
-            self.icon = self.icon["href"] if self.icon else None
+        self._get_tokens()
 
         if not self.loggedIn:
             # Fetch the loginpage and prepare a soup
-            soup, r = self._fetchPage(url=self.host + URL_LOGIN_PAGE, return_r=True)
+            res = self.session.get(self.host + URL_LOGIN_PAGE)
+            if res.status_code == 200:
+                soup = BS(res.text, "html.parser")
 
             # Prepare the payload
             payload = {}
@@ -355,7 +200,8 @@ class Library:
 
                 # Send the payload as POST and prepare a new soup
                 # Use the URL from the response since we have been directed
-                soup = self._fetchPage(form["action"].replace("/login", r.url), payload)
+                res2 = self.session.post(form["action"].replace("/login", res.url), data=payload)
+                res2.raise_for_status()
 
             except (AttributeError, KeyError) as err:
                 _LOGGER.error(
@@ -363,73 +209,28 @@ class Library:
                     self.host + URL_LOGIN_PAGE,
                     err,
                 )
-
-            # Set loggedIn
-#            self.loggedIn = self._titleInSoup(soup, LOGGED_IN)
-            self.loggedIn = self._logged_in(soup)
+            self._get_tokens()
 
         if DEBUG:
             _LOGGER.debug("(%s) is logged in: %s", self.user.userId[:-4], self.loggedIn)
-
         return self.loggedIn
 
-    def _logged_in(self, soup):
-        if soup.body.has_attr('class'):
-            if set(soup.body['class']).intersection({'logged-in', 'user-logged-in'}):
-                return True
-        return False
+    def _get_tokens(self):
+        if not self.access_token or not self.loggedIn:
+            res = self.session.get(f"{self.host}/dpl-react/user-tokens")
+            if res.status_code == 200:
+                self.library_token = res.text.split('"library"')[1].split('"')[1]
+                self.loggedIn = '"user"' in res.text
+                if self.loggedIn:
+                    self.user_token = res.text.split('"user"')[1].split('"')[1]
+                    self.json_header["Authorization"] = f"Bearer {self.user_token}"
+        if not self.access_token:
+            res = self.session.get('https://bibliotek.dk')
+            if res.status_code == 200:
+                self.access_token = res.text.split('"accessToken"')[1].split('"', 2)[1]
 
-    def login_eLib(self) -> tuple:
-        # Make sure we are logged OUT
-        if self.loggedIn:
-            self.logout()
-            return self.login_eLib()
-
-        # Test if we are logged in at eReolen.dk
-        soup, r = self._fetchPage(url=self.host_elib, return_r=True)
-        if r.status_code == 200:
-#            self.eLoggedIn = self._titleInSoup(soup, LOGGED_IN_ELIB)
-            self.eLoggedIn = self._logged_in(soup)
-
-        if not self.loggedIn:
-            soup, r = self._fetchPage(
-                url=self.host_elib + URL_LOGIN_PAGE_ELIB, return_r=True
-            )
-
-            payload = self.user.userInfo
-            payload[CONF_AGENCY] = self.agency
-
-            try:
-                libraryFormToken = soup.select_one("input[name*=libraryName-]")
-                if libraryFormToken:
-                    payload[libraryFormToken["name"]] = self.municipality
-
-                # Send the payload aka LOGIN
-                soup = self._fetchPage(
-                    soup.form["action"].replace("/login", r.url), payload
-                )
-                self.LoggedIn = self._logged_in(soup)
-#                self.loggedIn = (
-#                    soup if self._titleInSoup(soup, LOGGED_IN_ELIB) else False
-#                )
-            except (AttributeError, KeyError) as err:
-                _LOGGER.error(
-                    "Error processing the <form> tag and subtags (%s). Error: (%s)",
-                    self.host_elib + URL_LOGIN_PAGE_ELIB,
-                    err,
-                )
-
-        if DEBUG:
-            _LOGGER.debug(
-                "(%s) is logged in @%s: {bool(self.loggedIn)}",
-                self.user.userId[:-4],
-                self.host_elib,
-            )
-
-        return self.loggedIn, soup
-
-    def logout(self, url=None):
-        url = self.host + URLS[LOGOUT] if not url else url
+    def logout(self):
+        url = self.host + "/user/logout"
         if self.loggedIn:
             # Fetch the logout page, if given a 200 (true) reverse it to false
             self.loggedIn = not self.session.get(url).status_code == 200
@@ -443,222 +244,176 @@ class Library:
                 not bool(self.loggedIn),
             )
 
-    def fecthELibUsedQuota(self, soup):
-        try:
-            for li in soup.h1.parent.div.ul.find_all("li"):
-                result = re.search(r"(\d+) ud af (\d+) (ebøger|lydbøger)", li.string)
-                if result:
-                    if result.group(3) == EBOOKS:
-                        self.user.eBooks = result.group(1)
-                        self.user.eBooksQuota = result.group(2)
-                    elif result.group(3) == AUDIO_BOOKS:
-                        self.user.audioBooks = result.group(1)
-                        self.user.audioBooksQuota = result.group(2)
-        except (AttributeError, KeyError) as err:
-            _LOGGER.error("Error getting the quotas of eReolen. Error: (%s)", err)
-
-        if DEBUG:
-            _LOGGER.debug(
-                "(%s), done fetching eLibQuotas: (%s/%s) (%s/%s)",
-                self.user.userId[:-4],
-                self.user.eBooks,
-                self.user.eBooksQuota,
-                self.user.audioBooks,
-                self.user.audioBooksQuota,
-            )
-
     # Get information on the user
     def fetchUserInfo(self):
         # Fetch the user profile page
-        soup = self._fetchPage(self.host + URLS[USER_PROFILE])
+        res = self.session.get('https://fbs-openplatform.dbc.dk/external/agencyid/patrons/patronid/v2', headers=self.json_header)
+        if res.status_code == 200:
+            try:
+                data = res.json()['patron']
 
-        try:
-            # From the <div> with a specific class, loop all the <div>
-            # containging a part of the class
-            for fields in soup.select_one("div[class=content]").select(
-                "div[class*=field-name]"
-            ):
-                fieldName = fields.select_one("div[class=field-label]")
-                # NASTY HTML PAGE....
-                # From the tag of the fieldName, go to the parent
-                # Find the first <div> with given class
-                fieldValue = fieldName.parent.select_one("div[class=field-items]").div
-                # Remove <br>, again NASTY HTML
-                for e in fieldValue.findAll("br"):
-                    e.extract()
-
-                # Find the correct place for the field
-                key = fieldName.string.lower()
-                if key == "navn":
-                    self.user.name = fieldValue.string
-                elif key == "adresse":
-                    self.user.address = fieldValue.contents
-
-            # Find the correct <form>, extract info
-            form = soup.select_one(f"form[action='{URLS[USER_PROFILE]}']")
-            self.user.phone = form.select_one("input[name*='phone]']")["value"]
-            self.user.phoneNotify = (
-                int(form.select_one("input[name*='phone_notification']")["value"]) == 1
-            )
-            self.user.mail = form.select_one("input[name*='mail]']")["value"]
-            self.user.mailNotify = (
-                int(form.select_one("input[name*='mail_notification']")["value"]) == 1
-            )
-
-            # Find our preferred library, when found break the loop
-            for library in form.select_one("select[name*='preferred_branch']").find_all(
-                "option"
-            ):
-                if "selected" in library.attrs:
-                    self.user.pickupLibrary = library.string
-                    break
-        except (AttributeError, KeyError) as err:
-            _LOGGER.error(
-                "Error getting user info (%s). Error: (%s)",
-                self.host + URLS[USER_PROFILE],
-                err,
-            )
-
-        if DEBUG:
-            _LOGGER.debug(
-                "(%s) is actually '%s'. Pickup library is %s",
-                self.user.userId[:-4],
-                self.user.name,
-                self.user.pickupLibrary,
-            )
+                self.user.name = data['name']
+                self.user.address = f'{data["address"]["street"]}\n{data["address"]["postalCode"]} {data["address"]["city"]}'
+                self.user.phone = data['phoneNumber']
+                self.user.phoneNotify = int(data['receiveSms'])
+                self.user.mail = data['emailAddress']
+                self.user.mailNotify = int(data['receiveEmail'])
+                self.user.pickupLibrary = self._branchName(data['preferredPickupBranch'])
+                self.libraryName = self._branchName(data['preferredPickupBranch'])
+            except (AttributeError, KeyError) as err:
+                _LOGGER.error(f"Error getting user info {self.user.userId}. Error: {err}")
 
     # Get the loans with all possible details
     def fetchLoans(self, soup=None) -> list:
-        # Fetch the loans page
-        if not soup:
-            soup = self._fetchPage(self.host + URLS[LOANS])
+        loans = []
+        loansOverdue = []
 
-        # From the <div> containing part of the class
-        # for material in soup.select("div[class*='material-item']"):
-        tempList = []
-        for material in self._getMaterials(soup.find("div", class_=DIVS[LOANS])):
-            # Create an instance of libraryLoan
-            obj = libraryLoan()
+        # Physical books
+        res = self.session.get("https://fbs-openplatform.dbc.dk/external/agencyid/patrons/patronid/loans/v2", headers=self.json_header)
+        if res.status_code == 200:
+            _LOGGER.error(f'{self.user.name} {self.json_header["Authorization"]} {len(res.json())}')
+            for material in res.json():
+                faust = material['loanDetails']['recordId']
+                data = self._getDetails(faust)
+                data['CoverUrl'] = self._getCoverUrl(data['pid'])
 
-            # Renewable
-            obj.renewId, obj.renewAble = self._getIdInfo(material)
+                # Create an instance of libraryLoan
+                obj = libraryLoan(data)
 
-            # URL and image
-            obj.url, obj.coverUrl = self._getMaterialUrls(material)
+                # Renewable
+                obj.renewId = material['loanDetails']['loanId']
+                obj.renewAble = material['isRenewable']
 
-            # Type, title and creator
-            obj.title, obj.creators, obj.type = self._getMaterialInfo(material)
+                # # URL and image
+                # obj.coverUrl = self._getCoverUrl(data['pid'])
 
-            # Details
-            for keys, value in self._getDetails(material):
-                if "loan-date" in keys:
-                    obj.loanDate = self._getDatetime(value)
-                elif "expire-date" in keys:
-                    obj.expireDate = self._getDatetime(value)
-                elif "material-number" in keys:
-                    obj.id = value
+                # # Type, title and creator
+                # obj.title = data['titles']['full'][0]
+                # obj.creators = data['creators'][0]['display']
+                # obj.type = data['materialTypes'][0]['materialTypeSpecific']['display']
 
-            # Add the loan to the stack
-            tempList.append(obj)
+                # Details
+                obj.loanDate = parser.parse(material['loanDetails']['loanDate'], ignoretz=True)
+                obj.expireDate = parser.parse(material['loanDetails']['dueDate'], ignoretz=True)
+                obj.id = material['loanDetails']['materialItemNumber']
 
-        if DEBUG:
-            _LOGGER.debug("%s has %s loans", self.user.name, len(tempList))
+                # Add the loan to the stack
+                loans.append(obj)
 
-        return tempList
+        # Ebooks
+        res = self.session.get('https://pubhub-openplatform.dbc.dk/v1/user/loans', headers=self.json_header)
+        if res.status_code == 200:
+            edata = res.json()
 
-    def fetchLoansOverdue(self) -> list:
-        if DEBUG:
-            _LOGGER.debug("%s, Reusing the fetchLoans function", self.user.name)
-        # Fetch the loans overdue page
-        return self.fetchLoans(self._fetchPage(self.host + URLS[LOANS_OVERDUE]))
+            self.user.eBooks = edata['userData']['totalEbookLoans']
+#            self.user.eBooksQuota = edata['userData']['ebookLoansRemaining'] + self.user.eBooks
+            self.user.eBooksQuota = edata['libraryData']['maxConcurrentEbookLoansPerBorrower']
+            self.user.audioBooks = edata['userData']['totalAudioLoans']
+#            self.user.audioBooksQuota = edata['userData']['audiobookLoansRemaining'] + self.user.audioBooks
+            self.user.audioBooksQuota = edata['libraryData']['maxConcurrentAudiobookLoansPerBorrower']
+
+            for material in edata['loans']:
+                id = material['libraryBook']['identifier']
+                res2 = self.session.get(f'https://pubhub-openplatform.dbc.dk/v1/products/{id}', headers=self.json_header)
+                if res2.status_code == 200:
+                    data = res2.json()['product']
+                    # Create an instance of libraryLoan
+                    obj = libraryLoan(data)
+                    obj.id = id
+
+                    # # URL and image
+                    # obj.coverUrl = data['thumbnailUri']
+
+                    # # Type, title and creator
+                    # obj.title = data['title']
+                    # obj.creators = ' og '.join([item['firstName'] + item['lastName'] for item in data['contributors']])
+                    # obj.type = data['format']
+
+                    # Details
+                    obj.loanDate = parser.parse(material['orderDateUtc'], ignoretz=True)
+                    obj.expireDate = parser.parse(material['loanExpireDateUtc'], ignoretz=True)
+                    loans.append(obj)
+        self.user.loans = loans
+        self.user.loansOverdue = loansOverdue
+
+    # def fetchLoansOverdue(self) -> list:
+    #     if DEBUG:
+    #         _LOGGER.debug("%s, Reusing the fetchLoans function", self.user.name)
+    #     # Fetch the loans overdue page
+    #     return self.fetchLoans(self._fetchPage(self.host + URLS[LOANS_OVERDUE]))
 
     # Get the current reservations
     def fetchReservations(self, soup=None) -> list:
-        # Fecth the reservations page
-        if not soup:
-            soup = self._fetchPage(self.host + URLS[RESERVATIONS])
+        reservations = []
+        reservationsReady = []
 
-        tempList = []
-        # From the <div> with containg the class of the materials
-        _LOGGER.debug("Number of divs (%s): (%d)", DIVS[RESERVATIONS], len(soup.select("."+DIVS[RESERVATIONS])))
-        for material in self._getMaterials(soup.find_all("div", class_=DIVS[RESERVATIONS])[len(soup.select("."+DIVS[RESERVATIONS]))-1]):
-            # Create a instance of libraryReservation
-            obj = libraryReservation()
-
+        # Physical
+        res = self.session.get("https://fbs-openplatform.dbc.dk/external/v1/agencyid/patrons/patronid/reservations/v2", headers=self.json_header)
+        materials = {item['transactionId']: item for item in res.json()}  # make sure only to take last if more than one item with same transaction
+        for material in materials.values():
             # Get the first element (id)
-            obj.id = self._getIdInfo(material)[0]
+            id = material['recordId']
+            data = self._getDetails(id)
+            data['CoverUrl'] = self._getCoverUrl(data['pid'])
 
-            # URL and image
-            obj.url, obj.coverUrl = self._getMaterialUrls(material)
+            if material['state'] == 'readyForPickup':
+                obj = libraryReservationReady(data)
+            else:
+                obj = libraryReservation(data)
+            obj.id = id
+            # # URL and image
+            # obj.coverUrl = self._getCoverUrl(data['pid'])
 
-            # Type, title and creator
-            obj.title, obj.creators, obj.type = self._getMaterialInfo(material)
+            # # Type, title and creator
+            # obj.title = data['titles']['full'][0]
+            # obj.creators = data['creators'][0]['display']
+            # obj.type = data['materialTypes'][0]['materialTypeSpecific']['display']
 
             # Details
-            for keys, value in self._getDetails(material):
-                if "expire-date" in keys:
-                    obj.expireDate = self._getDatetime(value)
-                elif "created-date" in keys:
-                    obj.createdDate = self._getDatetime(value)
-                elif "queue-number" in keys:
-                    obj.queueNumber = value
-                elif "pickup-branch" in keys:
-                    obj.pickupLibrary = value
+            obj.createdDate = parser.parse(material['dateOfReservation'], ignoretz=True)
+            obj.pickupLibrary = self._branchName(material['pickupBranch'])
+            if material['state'] == 'readyForPickup':
+                obj.reservationNumber = material['pickupNumber']
+                obj.pickupDate = parser.parse(material['pickupDeadline'], ignoretz=True)
+                reservationsReady.append(obj)
+            else:
+                obj.expireDate = parser.parse(material['expiryDate'], ignoretz=True)
+                obj.queueNumber = material['numberInQueue']
+                reservations.append(obj)
 
-            # Add the reservation to the stack
-            tempList.append(obj)
+        res = self.session.get("https://pubhub-openplatform.dbc.dk/v1/user/reservations", headers=self.json_header)
+        if res.status_code == 200:
+            edata = res.json()
+            for material in edata['reservations']:
+                id = material['libraryBook']['identifier']
+                res2 = self.session.get(f'https://pubhub-openplatform.dbc.dk/v1/products/{id}', headers=self.json_header)
+                if res2.status_code == 200:
+                    data = res2.json()['product']
 
-        if DEBUG:
-            _LOGGER.debug("%s has %s reservations", self.user.name, len(tempList))
+                    obj = libraryReservation(data)
+                    obj.id = id
 
-        return tempList
+                    # # URL and image
+                    # obj.coverUrl = data['thumbnailUri']
 
-    # Get the reservations which are ready
-    def fetchReservationsReady(self, soup=None) -> list:
-        # Fecth the ready reservationsReady page
-        if not soup:
-            soup = self._fetchPage(self.host + URLS[RESERVATIONS_READY])
+                    # # Type, title and creator
+                    # obj.title = data['title']
+                    # obj.creators = ' og '.join([item['firstName'] + item['lastName'] for item in data['contributors']])
+                    # obj.type = data['format']
 
-        tempList = []
-        # From the <div> with the materials
-        for material in self._getMaterials(soup.find("div", class_=DIVS[RESERVATIONS_READY])):
-            # Create a instance of libraryReservationReady
-            obj = libraryReservationReady()
-
-            # Get the first element (id)
-            obj.id = self._getIdInfo(material)[0]
-
-            # URL and image
-            obj.url, obj.coverUrl = self._getMaterialUrls(material)
-
-            # Type, title and creator
-            obj.title, obj.creators, obj.type = self._getMaterialInfo(material)
-
-            # Details
-            for keys, value in self._getDetails(material):
-                if "pickup-id" in keys:
-                    obj.reservationNumber = value
-                elif "pickup-date" in keys:
-                    obj.pickupDate = self._getDatetime(value)
-                elif "created-date" in keys:
-                    obj.createdDate = self._getDatetime(value)
-                elif "pickup-branch" in keys:
-                    obj.pickupLibrary = value
-
-            # Add the reservation to the stack
-            tempList.append(obj)
-
-        if DEBUG:
-            _LOGGER.debug(
-                "%s has %s reservations ready for pickup", self.user.name, len(tempList)
-            )
-
-        return tempList
+                    # # Details TODO
+                    # obj.expireDate = parser.parse(data['expiryDate'])
+                    # obj.createdDate = parser.parse(data['dateOfReservation'])
+                    # obj.queueNumber = data['numberInQueue']
+                    # obj.pickupLibrary = data['pickupBranch']
+                    reservations.append(obj)
+        self.user.reservations = reservations
+        self.user.reservationsReady = reservationsReady
 
     # Get debts, if any, from the Library
     def fetchDebts(self) -> tuple:
-        # Fetch the debts page
-        soup = self._fetchPage(self.host + URLS[DEBTS])
+        params = {'includepaid':'false', 'includenonpayable':'true'}
+        res = self.session.get("https://fbs-openplatform.dbc.dk/external/agencyid/patron/patronid/fees/v2", params=params, headers=self.json_header)
 
         tempList = []
         # From the <div> with containg the class of the materials
@@ -719,6 +474,25 @@ class libraryMaterial:
     id = None
     type, title, creators = None, None, None
     url, coverUrl = None, None
+
+    def __init__(self, data):
+        try:
+            if 'thumbnailUri' in data:
+                # from ereol
+                self.coverUrl = data['thumbnailUri']
+                self.title = data['title']
+                self.creators = ' og '.join([item['firstName'] + item['lastName'] for item in data['contributors']])
+                self.type = data['format']
+            else:
+                # physical book
+                self.coverUrl = data['CoverUrl']
+                self.title = data['titles']['full'][0]
+                if data['creators']:
+                    self.creators = data['creators'][0]['display']
+                self.type = data['materialTypes'][0]['materialTypeSpecific']['display']
+        except Exception as err:
+            _LOGGER.error(f'Failed to set material data, {err}')
+            _LOGGER.error(f'{data}')
 
 
 class libraryLoan(libraryMaterial):
