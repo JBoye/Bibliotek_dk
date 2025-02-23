@@ -5,12 +5,11 @@ CONF_MUNICIPALITY = "municipality"
 CONF_NAME = "name"
 CONF_PINCODE = "pincode"
 CONF_SHOW_DEBTS = "show_debts"
-CONF_SHOW_E_LIBRARY = "show_e_library"
 CONF_SHOW_LOANS = "show_loans"
 CONF_SHOW_RESERVATIONS = "show_reservations"
 CONF_UPDATE_INTERVAL = "update_interval"
 CONF_USER_ID = "user_id"
-CREDITS = "J-Lindvig (https://github.com/J-Lindvig)"
+CREDITS = "J-Lindvig & TermeHansen (https://github.com/TermeHansen/Bibliotek_dk)"
 
 DOMAIN = "bibliotek_dk"
 
@@ -36,10 +35,3 @@ URL_FALLBACK = "https://bibliotek.kk.dk"
 URL_LOGIN = "/login"
 URL_LOGIN_PAGE = "/login?current-path=/user/me/dashboard"
 ICON = "https://bibliotek.dk/icons/logo.svg"
-USER_AGENTS = [
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:77.0) Gecko/20100101 Firefox/77.0",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:77.0) Gecko/20100101 Firefox/77.0",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.97 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.97 Safari/537.36",
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
-]

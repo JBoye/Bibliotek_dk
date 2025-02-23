@@ -3,7 +3,6 @@ from __future__ import annotations
 from bs4 import BeautifulSoup as BS
 from dateutil import parser
 import logging
-import random
 import re
 import requests
 import json
@@ -11,7 +10,6 @@ import json
 from .const import (
     HEADERS, JSON_HEADERS,
     URL_LOGIN_PAGE, ICON,
-    USER_AGENTS,
 )
 DEBUG = True
 
@@ -29,10 +27,6 @@ class Library:
     ) -> None:
 
         _LOGGER.info(f'{host}, {userId}, {pincode}')
-        # Prepare a new session with a random user-agent
-#        HEADERS["User-Agent"] = random.choice(USER_AGENTS)
-#        _LOGGER.info(HEADERS["User-Agent"])
-
         self.session = requests.Session()
         self.session.headers = HEADERS
         self.json_header = JSON_HEADERS.copy()
@@ -71,41 +65,7 @@ class Library:
         self.running = False
         return True
 
-    #### PRIVATE BEGIN ####
-    # Retrieve a webpage with either GET/POST
-    def _fetchPage(self, url=str, payload=None, return_r=False):
-        try:
-            # If payload, use POST
-            if payload:
-                r = self.session.post(url, data=payload)
-                _LOGGER.info(f'{url}, {payload}')
-
-            # else use GET
-            else:
-                r = self.session.get(url)
-
-            r.raise_for_status()
-
-        except requests.exceptions.HTTPError as err:
-            _LOGGER.error(f"HTTP Error while fetching {url}: {err}")
-            # Handle the error as needed, e.g., raise it, log it, or notify the user.
-            return None if return_r else None, None
-        except requests.exceptions.Timeout:
-            _LOGGER.error("Timeout fecthing (%s)", url)
-            return None if return_r else None, None
-        except requests.exceptions.TooManyRedirects:
-            _LOGGER.error("Too many redirects fecthing (%s)", url)
-            return None if return_r else None, None
-        except requests.exceptions.RequestException as err:
-            _LOGGER.error(f"Request Exception while fetching {url}: {err}")
-            return None if return_r else None, None
-
-        if return_r:
-            return BS(r.text, "html.parser"), r
-
-        # Return HTML soup
-        return BS(r.text, "html.parser")
-
+    # PRIVATE BEGIN ####
     def sortLists(self):
         # Sort the loans by expireDate and the Title
         self.user.loans.sort(key=lambda obj: (obj.expireDate is None, obj.expireDate, obj.title))
@@ -121,17 +81,6 @@ class Library:
         )
         # Sort the reservations
         self.user.reservationsReady.sort(key=lambda obj: (obj.pickupDate is None, obj.pickupDate, obj.title))
-
-    def _getIdInfo(self, material) -> tuple:
-        try:
-            value = material.input["value"]
-            renewAble = "disabled" not in material.input.attrs
-        except (AttributeError, KeyError) as err:
-            _LOGGER.error(
-                "Error in getting the Id and renewable on the material. Error: (%s)",
-                err,
-            )
-        return value, renewAble
 
     def _getCoverUrl(self, id, typ='pid'):
         header = {**self.json_header, **{'Authorization': f'Bearer {self.library_token}', 'Accept': '*/*'}}
