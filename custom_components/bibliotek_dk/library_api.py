@@ -26,7 +26,6 @@ class Library:
         self, userId: str, pincode: str, host=str, libraryName=None
     ) -> None:
 
-        _LOGGER.info(f'{host}, {userId}, {pincode}')
         self.session = requests.Session()
         self.session.headers = HEADERS
         self.json_header = JSON_HEADERS.copy()
@@ -39,7 +38,7 @@ class Library:
         self.host = host
         self.user = libraryUser(userId=userId, pincode=pincode)
         self.municipality = libraryName
-        self.icon = ICON
+#        self.icon = ICON
 
     # The update function is called from the coordinator from Home Assistant
     def update(self):
@@ -55,7 +54,7 @@ class Library:
             # Fetch the states of the user
             self.fetchLoans()
             self.fetchReservations()
-#            self.user.debts, self.user.debtsAmount = self.fetchDebts()
+            self.fetchDebts()
 
             # Logout
             self.logout()
@@ -115,6 +114,8 @@ class Library:
         res = self.session.post("https://temp.fbi-api.dbc.dk/next-present/graphql", headers=self.json_header, data=json.dumps(params))
         if res.status_code == 200:
             data = res.json()['data']['manifestation']
+        else:
+            _LOGGER.error(f"Error getting details for material'{faust}'")
         return data
 
     def _removeCurrency(self, amount) -> float:
@@ -220,34 +221,26 @@ class Library:
         # Physical books
         res = self.session.get("https://fbs-openplatform.dbc.dk/external/agencyid/patrons/patronid/loans/v2", headers=self.json_header)
         if res.status_code == 200:
-            _LOGGER.error(f'{self.user.name} {self.json_header["Authorization"]} {len(res.json())}')
             for material in res.json():
                 faust = material['loanDetails']['recordId']
                 data = self._getDetails(faust)
-                data['CoverUrl'] = self._getCoverUrl(data['pid'])
+                if data:
+                    data['CoverUrl'] = self._getCoverUrl(data['pid'])
 
-                # Create an instance of libraryLoan
-                obj = libraryLoan(data)
+                    # Create an instance of libraryLoan
+                    obj = libraryLoan(data)
 
-                # Renewable
-                obj.renewId = material['loanDetails']['loanId']
-                obj.renewAble = material['isRenewable']
+                    # Renewable
+                    obj.renewId = material['loanDetails']['loanId']
+                    obj.renewAble = material['isRenewable']
 
-                # # URL and image
-                # obj.coverUrl = self._getCoverUrl(data['pid'])
+                    # Details
+                    obj.loanDate = parser.parse(material['loanDetails']['loanDate'], ignoretz=True)
+                    obj.expireDate = parser.parse(material['loanDetails']['dueDate'], ignoretz=True)
+                    obj.id = material['loanDetails']['materialItemNumber']
 
-                # # Type, title and creator
-                # obj.title = data['titles']['full'][0]
-                # obj.creators = data['creators'][0]['display']
-                # obj.type = data['materialTypes'][0]['materialTypeSpecific']['display']
-
-                # Details
-                obj.loanDate = parser.parse(material['loanDetails']['loanDate'], ignoretz=True)
-                obj.expireDate = parser.parse(material['loanDetails']['dueDate'], ignoretz=True)
-                obj.id = material['loanDetails']['materialItemNumber']
-
-                # Add the loan to the stack
-                loans.append(obj)
+                    # Add the loan to the stack
+                    loans.append(obj)
 
         # Ebooks
         res = self.session.get('https://pubhub-openplatform.dbc.dk/v1/user/loans', headers=self.json_header)
@@ -255,10 +248,8 @@ class Library:
             edata = res.json()
 
             self.user.eBooks = edata['userData']['totalEbookLoans']
-#            self.user.eBooksQuota = edata['userData']['ebookLoansRemaining'] + self.user.eBooks
             self.user.eBooksQuota = edata['libraryData']['maxConcurrentEbookLoansPerBorrower']
             self.user.audioBooks = edata['userData']['totalAudioLoans']
-#            self.user.audioBooksQuota = edata['userData']['audiobookLoansRemaining'] + self.user.audioBooks
             self.user.audioBooksQuota = edata['libraryData']['maxConcurrentAudiobookLoansPerBorrower']
 
             for material in edata['loans']:
@@ -266,19 +257,10 @@ class Library:
                 res2 = self.session.get(f'https://pubhub-openplatform.dbc.dk/v1/products/{id}', headers=self.json_header)
                 if res2.status_code == 200:
                     data = res2.json()['product']
-                    # Create an instance of libraryLoan
                     obj = libraryLoan(data)
-                    obj.id = id
-
-                    # # URL and image
-                    # obj.coverUrl = data['thumbnailUri']
-
-                    # # Type, title and creator
-                    # obj.title = data['title']
-                    # obj.creators = ' og '.join([item['firstName'] + item['lastName'] for item in data['contributors']])
-                    # obj.type = data['format']
 
                     # Details
+                    obj.id = id
                     obj.loanDate = parser.parse(material['orderDateUtc'], ignoretz=True)
                     obj.expireDate = parser.parse(material['loanExpireDateUtc'], ignoretz=True)
                     loans.append(obj)
@@ -303,32 +285,26 @@ class Library:
             # Get the first element (id)
             id = material['recordId']
             data = self._getDetails(id)
-            data['CoverUrl'] = self._getCoverUrl(data['pid'])
+            if data:
+                data['CoverUrl'] = self._getCoverUrl(data['pid'])
 
-            if material['state'] == 'readyForPickup':
-                obj = libraryReservationReady(data)
-            else:
-                obj = libraryReservation(data)
-            obj.id = id
-            # # URL and image
-            # obj.coverUrl = self._getCoverUrl(data['pid'])
+                if material['state'] == 'readyForPickup':
+                    obj = libraryReservationReady(data)
+                else:
+                    obj = libraryReservation(data)
 
-            # # Type, title and creator
-            # obj.title = data['titles']['full'][0]
-            # obj.creators = data['creators'][0]['display']
-            # obj.type = data['materialTypes'][0]['materialTypeSpecific']['display']
-
-            # Details
-            obj.createdDate = parser.parse(material['dateOfReservation'], ignoretz=True)
-            obj.pickupLibrary = self._branchName(material['pickupBranch'])
-            if material['state'] == 'readyForPickup':
-                obj.reservationNumber = material['pickupNumber']
-                obj.pickupDate = parser.parse(material['pickupDeadline'], ignoretz=True)
-                reservationsReady.append(obj)
-            else:
-                obj.expireDate = parser.parse(material['expiryDate'], ignoretz=True)
-                obj.queueNumber = material['numberInQueue']
-                reservations.append(obj)
+                # Details
+                obj.id = id
+                obj.createdDate = parser.parse(material['dateOfReservation'], ignoretz=True)
+                obj.pickupLibrary = self._branchName(material['pickupBranch'])
+                if material['state'] == 'readyForPickup':
+                    obj.reservationNumber = material['pickupNumber']
+                    obj.pickupDate = parser.parse(material['pickupDeadline'], ignoretz=True)
+                    reservationsReady.append(obj)
+                else:
+                    obj.expireDate = parser.parse(material['expiryDate'], ignoretz=True)
+                    obj.queueNumber = material['numberInQueue']
+                    reservations.append(obj)
 
         res = self.session.get("https://pubhub-openplatform.dbc.dk/v1/user/reservations", headers=self.json_header)
         if res.status_code == 200:
@@ -363,46 +339,36 @@ class Library:
     def fetchDebts(self) -> tuple:
         params = {'includepaid':'false', 'includenonpayable':'true'}
         res = self.session.get("https://fbs-openplatform.dbc.dk/external/agencyid/patron/patronid/fees/v2", params=params, headers=self.json_header)
+        if res.status_code == 200:
+            debts = []
+            _LOGGER.error(f"dept data {res.json()}")
+            for material in res.json():
+                # Get the first element (id)
+                id = material['recordId']
+                data = self._getDetails(id)
+                if data:
+                    obj = libraryDebt()
+                    data['CoverUrl'] = self._getCoverUrl(data['pid'])
 
-        tempList = []
-        # From the <div> with containg the class of the materials
-        for material in self._getMaterials(soup):
-            obj = libraryDebt()
+                    # obj.feeDate = self._getDatetime(value)
+                    # obj.feeType = value
+                    # obj.feeAmount = self._removeCurrency(value)
+                    debts.append(obj)
+        self.user.debts = debts
+        # try:
+        #     amount = soup.select_one("span[class='amount']")
+        #     amount = self._removeCurrency(amount.string) if amount else 0.0
+        # except (AttributeError, KeyError) as err:
+        #     _LOGGER.error("Error processing the debt amount. Error: (%s)", err)
 
-            # Get the first element (id)
-            # obj.id = self._getIdInfo(material)[0] # This actuallly serves no purpose for debts
+        # if DEBUG:
+        #     _LOGGER.debug(
+        #         "%s has %s debts with a total of {amount}",
+        #         self.user.name,
+        #         len(tempList),
+        #     )
 
-            # URL and image
-            obj.url, obj.coverUrl = self._getMaterialUrls(material)
-
-            # Type, title and creator
-            obj.title, obj.creators, obj.type = self._getMaterialInfo(material)
-
-            # Details
-            for keys, value in self._getDetails(material):
-                if "fee-date" in keys:
-                    obj.feeDate = self._getDatetime(value)
-                elif "fee-type" in keys:
-                    obj.feeType = value
-                elif "fee_amount" in keys:
-                    obj.feeAmount = self._removeCurrency(value)
-
-            tempList.append(obj)
-
-        try:
-            amount = soup.select_one("span[class='amount']")
-            amount = self._removeCurrency(amount.string) if amount else 0.0
-        except (AttributeError, KeyError) as err:
-            _LOGGER.error("Error processing the debt amount. Error: (%s)", err)
-
-        if DEBUG:
-            _LOGGER.debug(
-                "%s has %s debts with a total of {amount}",
-                self.user.name,
-                len(tempList),
-            )
-
-        return tempList, amount
+        # return tempList, amount
 
 
 class libraryUser:
