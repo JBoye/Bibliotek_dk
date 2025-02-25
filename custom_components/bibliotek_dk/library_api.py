@@ -37,6 +37,7 @@ class Library:
 
         self.host = host
         self.user = libraryUser(userId=userId, pincode=pincode)
+        self.user.date =  self.user.userId[:-4]
         self.municipality = libraryName
 #        self.icon = ICON
 
@@ -130,10 +131,14 @@ class Library:
         self._get_tokens()
 
         if not self.loggedIn:
+            _LOGGER.error(f"({self.user.date}) is logging in")
             # Fetch the loginpage and prepare a soup
             res = self.session.get(self.host + URL_LOGIN_PAGE)
             if res.status_code == 200:
                 soup = BS(res.text, "html.parser")
+            else:
+                _LOGGER.error("f({self.user.date}) Failed to get login page")
+                return
 
             # Prepare the payload
             payload = {}
@@ -153,7 +158,8 @@ class Library:
                 res2 = self.session.post(form["action"].replace("/login", res.url), data=payload)
                 res2.raise_for_status()
 
-            except (AttributeError, KeyError) as err:
+#            except (AttributeError, KeyError) as err:
+            except Exception as err:
                 _LOGGER.error(
                     "Error processing the <form> tag and subtags (%s). Error: (%s)",
                     self.host + URL_LOGIN_PAGE,
@@ -180,11 +186,14 @@ class Library:
                 self.access_token = res.text.split('"accessToken"')[1].split('"', 2)[1]
 
     def logout(self):
-        url = self.host + "/user/logout"
+        url = self.host + "/logout"
         if self.loggedIn:
             # Fetch the logout page, if given a 200 (true) reverse it to false
             self.loggedIn = not self.session.get(url).status_code == 200
             if not self.loggedIn:
+                self.access_token = ''
+                self.user_token = ''
+                self.library_token = ''
                 self.session.close()
         if DEBUG:
             _LOGGER.debug(
@@ -314,6 +323,7 @@ class Library:
                 res2 = self.session.get(f'https://pubhub-openplatform.dbc.dk/v1/products/{id}', headers=self.json_header)
                 if res2.status_code == 200:
                     data = res2.json()['product']
+                    _LOGGER.error(f"E-reol reservering data {res.json()}")
 
                     obj = libraryReservation(data)
                     obj.id = id
@@ -341,34 +351,21 @@ class Library:
         res = self.session.get("https://fbs-openplatform.dbc.dk/external/agencyid/patron/patronid/fees/v2", params=params, headers=self.json_header)
         if res.status_code == 200:
             debts = []
-            _LOGGER.error(f"dept data {res.json()}")
+#            _LOGGER.error(f"dept data {res.json()}")
             for material in res.json():
                 # Get the first element (id)
                 id = material['recordId']
                 data = self._getDetails(id)
                 if data:
-                    obj = libraryDebt()
+                    obj = libraryDebt(data)
                     data['CoverUrl'] = self._getCoverUrl(data['pid'])
 
-                    # obj.feeDate = self._getDatetime(value)
-                    # obj.feeType = value
-                    # obj.feeAmount = self._removeCurrency(value)
+                    obj.feeDate = parser.parse(data['creationDate'], ignoretz=True)
+                    obj.feeDueDate = parser.parse(data['dueDate'], ignoretz=True)
+                    obj.feeAmount = data['amount']
                     debts.append(obj)
         self.user.debts = debts
-        # try:
-        #     amount = soup.select_one("span[class='amount']")
-        #     amount = self._removeCurrency(amount.string) if amount else 0.0
-        # except (AttributeError, KeyError) as err:
-        #     _LOGGER.error("Error processing the debt amount. Error: (%s)", err)
-
-        # if DEBUG:
-        #     _LOGGER.debug(
-        #         "%s has %s debts with a total of {amount}",
-        #         self.user.name,
-        #         len(tempList),
-        #     )
-
-        # return tempList, amount
+        self.user.debtsAmount = sum([float(obj.feeAmount) for obj in debts])
 
 
 class libraryUser:
@@ -426,4 +423,4 @@ class libraryReservationReady(libraryMaterial):
 
 
 class libraryDebt(libraryMaterial):
-    feeDate, feeType, feeAmount = None, None, None
+    feeDate, feeDueDate, feeAmount = None, None, None
