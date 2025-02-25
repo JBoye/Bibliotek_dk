@@ -346,24 +346,27 @@ class Library:
         self.user.reservationsReady = reservationsReady
 
     # Get debts, if any, from the Library
-    def fetchDebts(self) -> tuple:
-        params = {'includepaid':'false', 'includenonpayable':'true'}
-        res = self.session.get("https://fbs-openplatform.dbc.dk/external/agencyid/patron/patronid/fees/v2", params=params, headers=self.json_header)
-        if res.status_code == 200:
-            debts = []
-#            _LOGGER.error(f"dept data {res.json()}")
-            for material in res.json():
-                # Get the first element (id)
-                id = material['recordId']
-                data = self._getDetails(id)
-                if data:
-                    obj = libraryDebt(data)
-                    data['CoverUrl'] = self._getCoverUrl(data['pid'])
+    def fetchDebts(self, json={}):
+        if json == {}:
+            params = {'includepaid': 'false', 'includenonpayable': 'true'}
+            res = self.session.get("https://fbs-openplatform.dbc.dk/external/agencyid/patron/patronid/fees/v2", params=params, headers=self.json_header)
+            if res.status_code == 200:
+                json = res.json()
+        debts = []
+#      _LOGGER.error(f"dept data {json}")
+        for debt in json:
+            # TODO more than one material?
+            material = debt['materials'][0]
+            id = material['recordId']
+            data = self._getDetails(id)
+            if data:
+                data['CoverUrl'] = self._getCoverUrl(data['pid'])
+                obj = libraryDebt(data)
 
-                    obj.feeDate = parser.parse(data['creationDate'], ignoretz=True)
-                    obj.feeDueDate = parser.parse(data['dueDate'], ignoretz=True)
-                    obj.feeAmount = data['amount']
-                    debts.append(obj)
+                obj.feeDate = parser.parse(debt['creationDate'], ignoretz=True)
+                obj.feeDueDate = parser.parse(debt['dueDate'], ignoretz=True)
+                obj.feeAmount = debt['amount']
+                debts.append(obj)
         self.user.debts = debts
         self.user.debtsAmount = sum([float(obj.feeAmount) for obj in debts])
 
