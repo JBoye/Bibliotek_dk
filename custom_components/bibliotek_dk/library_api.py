@@ -114,9 +114,10 @@ class Library:
         }
         res = self.session.post("https://temp.fbi-api.dbc.dk/next-present/graphql", headers=self.json_header, data=json.dumps(params))
         if res.status_code == 200:
+            _LOGGER.error(f"Empty material '{faust}'? {res.json()['data']}")
             data = res.json()['data']['manifestation']
         else:
-            _LOGGER.error(f"Error getting details for material'{faust}'")
+            _LOGGER.error(f"Error getting details for material: '{faust}'")
         return data
 
     def _removeCurrency(self, amount) -> float:
