@@ -5,7 +5,6 @@ from dateutil import parser
 import logging
 import re
 import requests
-import json
 
 from .const import (
     HEADERS, JSON_HEADERS,
@@ -99,7 +98,7 @@ class Library:
             'variables': {'language': "DA", 'limit': 2, 'q': id}
         }
         header = {**self.json_header, **{'Authorization': f'Bearer {self.access_token}', 'Accept': '*/*'}}
-        res = self.session.post('https://fbi-api.dbc.dk/bibdk21/graphql', headers=header, data=json.dumps(params))
+        res = self.session.post('https://fbi-api.dbc.dk/bibdk21/graphql', headers=header, json=params)
         if res.status_code == 200:
             data = res.json()['data']['branches']
             if data['hitcount'] == 1:
@@ -112,7 +111,7 @@ class Library:
             "query": "\n    query getManifestationViaMaterialByFaust($faust: String!) {\n  manifestation(faust: $faust) {\n    ...ManifestationBasicDetails\n  }\n}\n    \n    fragment ManifestationBasicDetails on Manifestation {\n  ...WithLanguages\n  pid\n  titles {\n    full\n  }\n  abstract\n  materialTypes {\n    materialTypeSpecific {\n      display\n    }\n  }\n  creators {\n    display\n  }\n  edition {\n    publicationYear {\n      display\n    }\n  }\n  series {\n    title\n    members {\n      numberInSeries\n    }\n  }\n}\n    \n    fragment WithLanguages on Manifestation {\n  languages {\n    main {\n      display\n      isoCode\n    }\n  }\n}\n    ",
             "variables": {"faust": faust}
         }
-        res = self.session.post("https://temp.fbi-api.dbc.dk/next-present/graphql", headers=self.json_header, data=json.dumps(params))
+        res = self.session.post("https://temp.fbi-api.dbc.dk/next-present/graphql", headers=self.json_header, json=params)
         if res.status_code == 200:
             _LOGGER.error(f"Empty material '{faust}'? {res.json()['data']}")
             data = res.json()['data']['manifestation']
