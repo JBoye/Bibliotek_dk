@@ -115,6 +115,11 @@ class Library:
         if res.status_code == 200:
             _LOGGER.error(f"Empty material '{faust}'? {res.json()['data']}")
             data = res.json()['data']['manifestation']
+            if not data:
+                header = {**self.json_header, **{'Authorization': f'Bearer {self.library_token}'}}
+                res = self.session.post("https://temp.fbi-api.dbc.dk/next-present/graphql", headers=header, json=params)
+                data = res.json()['data']['manifestation']
+                _LOGGER.error(f"{res.json()['data']}")
         else:
             _LOGGER.error(f"Error getting details for material: '{faust}'")
         return data
