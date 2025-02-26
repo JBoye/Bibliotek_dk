@@ -116,19 +116,12 @@ class Library:
             _LOGGER.error(f"Empty material '{faust}'? {res.json()['data']}")
             data = res.json()['data']['manifestation']
             if not data:
-                header = {**self.json_header, **{'Authorization': f'Bearer {self.library_token}'}}
-                res = self.session.post("https://temp.fbi-api.dbc.dk/next-present/graphql", headers=header, json=params)
+                res = self.session.post("https://temp.fbi-api.dbc.dk/next/graphql", headers=self.json_header, json=params)
                 data = res.json()['data']['manifestation']
                 _LOGGER.error(f"{res.json()['data']}")
         else:
             _LOGGER.error(f"Error getting details for material: '{faust}'")
         return data
-
-    def _removeCurrency(self, amount) -> float:
-        result = re.search(r"(\d*\,\d*)", amount)
-        if result:
-            amount = float(result.group(1).replace(",", "."))
-        return amount
 
     # PRIVATE END  ####
 
@@ -176,7 +169,7 @@ class Library:
         return self.loggedIn
 
     def _get_tokens(self):
-        if not self.access_token or not self.loggedIn:
+        if not self.library_token or not self.loggedIn:
             res = self.session.get(f"{self.host}/dpl-react/user-tokens")
             if res.status_code == 200:
                 self.library_token = res.text.split('"library"')[1].split('"')[1]
@@ -227,7 +220,11 @@ class Library:
                 _LOGGER.error(f"Error getting user info {self.user.userId}. Error: {err}")
 
     # Get the loans with all possible details
-    def fetchLoans(self, soup=None) -> list:
+    def fetchLoans(self, soup=None):
+        res = self.session.get(f'{self.host}/user/me/loans')
+        if res.status_code == 200:
+            self.urls = {m[0]: m[1] for m in re.findall(r'(data-[a-zA-Z0-9\-\_]+-url)="([^"]*)"', res.text)}
+
         loans = []
         loansOverdue = []
         # Physical books
@@ -237,7 +234,6 @@ class Library:
             for material in res.json()[:2]:
                 faust = material['loanDetails']['recordId']
                 data = self._getDetails(faust)
-                _LOGGER.error(f'user: ({self.user.date}), faust: {faust}')
                 if data:
                     data['CoverUrl'] = self._getCoverUrl(data['pid'])
 
@@ -255,8 +251,6 @@ class Library:
 
                     # Add the loan to the stack
                     loans.append(obj)
-                else:
-                    _LOGGER.error(f'{data} {material}')
 
         # Ebooks
         res = self.session.get('https://pubhub-openplatform.dbc.dk/v1/user/loans', headers=self.json_header)
