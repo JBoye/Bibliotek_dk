@@ -46,7 +46,7 @@ class Library:
         _LOGGER.debug(f"Updating ({self.user.userId[:-4]})")
 
         # Only one user can login at the time.
-        self.running = True
+#        self.running = True
         if self.login():
             # Only fetch user info once
             if not self.user.name:
@@ -62,7 +62,7 @@ class Library:
 
             # Sort the lists
             self.sortLists()
-        self.running = False
+#        self.running = False
         return True
 
     # PRIVATE BEGIN ####
@@ -131,7 +131,6 @@ class Library:
         self._get_tokens()
 
         if not self.loggedIn:
-            _LOGGER.error(f"({self.user.date}) is logging in")
             # Fetch the loginpage and prepare a soup
             res = self.session.get(self.host + URL_LOGIN_PAGE)
             if res.status_code == 200:
