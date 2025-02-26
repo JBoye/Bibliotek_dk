@@ -225,14 +225,14 @@ class Library:
     def fetchLoans(self, soup=None) -> list:
         loans = []
         loansOverdue = []
-        _LOGGER.error(f'user: ({self.user.date}), {self.json_header["Authorization"]}')
         # Physical books
         res = self.session.get("https://fbs-openplatform.dbc.dk/external/agencyid/patrons/patronid/loans/v2", headers=self.json_header)
         if res.status_code == 200:
             _LOGGER.error(f'user: ({self.user.date}), physical loans: {len(res.json())}')
-            for material in res.json():
+            for material in res.json()[:2]:
                 faust = material['loanDetails']['recordId']
                 data = self._getDetails(faust)
+                _LOGGER.error(f'user: ({self.user.date}), faust: {faust}')
                 if data:
                     data['CoverUrl'] = self._getCoverUrl(data['pid'])
 
@@ -250,8 +250,8 @@ class Library:
 
                     # Add the loan to the stack
                     loans.append(obj)
-        else:
-            _LOGGER.error(f'user: ({self.user.date}), physical loans failed: {res.text}')
+                else:
+                    _LOGGER.error(f'{data} {material}')
 
         # Ebooks
         res = self.session.get('https://pubhub-openplatform.dbc.dk/v1/user/loans', headers=self.json_header)
