@@ -40,3 +40,134 @@ ICON = '''<svg fill="none" xmlns="http://www.w3.org/2000/svg" width="24" height=
 </g>
 </svg>'''
 
+status_query = '''
+    query BasicUser {
+      user {
+        name
+        mail
+        address
+        postalCode
+        isCPRValidated
+        loggedInAgencyId
+        loggedInBranchId
+        municipalityAgencyId
+        agencies {
+          id
+          name
+          type
+          hitcount
+          user {
+            mail
+          }
+          result {
+            branchId
+            name
+          }
+        }
+        debt {
+            title
+            amount
+            creator
+            date
+            currency
+            agencyId
+        }
+        loans {
+          agencyId
+          loanId
+          dueDate
+          title
+          creator
+          manifestation {
+            pid
+            ...manifestationTitleFragment
+            ownerWork {
+              workId
+            }
+            creators {
+              ...creatorsFragment
+            }
+            materialTypes {
+              ...materialTypesFragment
+            }
+            cover {
+              thumbnail
+            }
+            recordCreationDate
+          }
+        }
+        orders {
+          orderId
+          status
+          pickUpBranch {
+            agencyName
+            agencyId
+          }
+          pickUpExpiryDate
+          holdQueuePosition
+          creator
+          orderType
+          orderDate
+          title
+          manifestation {
+            pid
+            ...manifestationTitleFragment
+            ownerWork {
+              workId
+            }
+            creators {
+              ...creatorsFragment
+            }
+            materialTypes {
+              ...materialTypesFragment
+            }
+            cover {
+              thumbnail
+            }
+            recordCreationDate
+          }
+        }   
+      }
+    }
+    fragment creatorsFragment on CreatorInterface {
+  ... on Corporation {
+    __typename
+    display
+    nameSort
+    roles {
+      function {
+        plural
+        singular
+      }
+      functionCode
+    }
+  }
+  ... on Person {
+    __typename
+    display
+    nameSort
+    roles {
+      function {
+        plural
+        singular
+      }
+      functionCode
+    }
+  }
+}
+    fragment manifestationTitleFragment on Manifestation {
+  titles {
+    main
+    full
+  }
+}
+    fragment materialTypesFragment on MaterialType {
+  materialTypeGeneral {
+    code
+    display
+  }
+  materialTypeSpecific {
+    code
+    display
+  }
+}'''

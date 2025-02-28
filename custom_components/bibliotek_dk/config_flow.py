@@ -49,6 +49,8 @@ async def validate_input(
 
     # Retrieve HOST and UPDATE_INTERVAL
     data[CONF_HOST] = libraries[data[CONF_MUNICIPALITY]][CONF_HOST]
+    data[CONF_AGENCY] = libraries[data[CONF_MUNICIPALITY]][CONF_AGENCY]
+    _LOGGER.error(f'{data[CONF_HOST]} {data[CONF_AGENCY]}')
     data[CONF_UPDATE_INTERVAL] = (
         data[CONF_UPDATE_INTERVAL] if data[CONF_UPDATE_INTERVAL] else UPDATE_INTERVAL
     )
@@ -73,7 +75,7 @@ async def validate_input(
         ):
             await asyncio.sleep(random.randint(5, 10))
 
-    myLibrary = Library(data[CONF_USER_ID], data[CONF_PINCODE], data[CONF_HOST])
+    myLibrary = Library(data[CONF_USER_ID], data[CONF_PINCODE], data[CONF_HOST], data[CONF_AGENCY])
     # Try to login to test the credentails
     if not await hass.async_add_executor_job(myLibrary.login):
         raise InvalidAuth

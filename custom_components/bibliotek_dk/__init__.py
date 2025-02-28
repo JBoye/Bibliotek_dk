@@ -8,6 +8,7 @@ from homeassistant.core import HomeAssistant
 from .library_api import Library
 
 from .const import (
+    CONF_AGENCY,
     CONF_HOST,
     CONF_MUNICIPALITY,
     CONF_PINCODE,
@@ -27,6 +28,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry.data[CONF_USER_ID],
         entry.data[CONF_PINCODE],
         entry.data[CONF_HOST],
+        entry.data[CONF_AGENCY],
         libraryName=entry.data[CONF_MUNICIPALITY],
     )
 
