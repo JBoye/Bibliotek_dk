@@ -141,7 +141,6 @@ class Library:
 
     def login(self, local_site=False):
         if not self.loggedIn:
-            _LOGGER.error(f'logging in to {self.agency} using local_site: {local_site} (national_site: {self.use_national})')
             if local_site:
                 url = self.host + URL_LOGIN_PAGE
             else:
@@ -168,7 +167,6 @@ class Library:
 
                 # Send the payload as POST and prepare a new soup
                 # Use the URL from the response since we have been directed
-                _LOGGER.error(f'logging in to {url} using {payload}')
                 res2 = self.session.post(form["action"].replace("/login", res.url), data=payload)
                 res2.raise_for_status()
 
@@ -286,8 +284,6 @@ class Library:
         self.urls = {}
         if res.status_code == 200:
             self.urls = {m[0]: m[1] for m in re.findall(r'(data-[a-zA-Z0-9\-\_]+-url)="([^"]*)"', res.text)}
-        url = self.urls.get('data-fbi-global-base-url', "https://temp.fbi-api.dbc.dk/next-present/graphql")
-        _LOGGER.error(f'getting detail info from {url}')
         loans = []
         loansOverdue = []
 
@@ -322,7 +318,6 @@ class Library:
                         obj.expireDate = parser.parse(material['loanDetails']['dueDate'], ignoretz=True)
                         obj.id = material['loanDetails']['materialItemNumber']
                         loans.append(obj)
-                _LOGGER.error(f'({self.user.date}) found {len(res.json())} loans, got data for {len(loans)}')
 
         # Ebooks
         res = self.session.get('https://pubhub-openplatform.dbc.dk/v1/user/loans', headers=self.json_header)
