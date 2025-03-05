@@ -145,7 +145,6 @@ class Library:
                 url = self.host + URL_LOGIN_PAGE
             else:
                 url = self._get_login_url()
-            print('loggin in to', url)
 
             res = self.session.get(url)
             if res.status_code != 200:
@@ -168,16 +167,14 @@ class Library:
 
                 # Send the payload as POST and prepare a new soup
                 # Use the URL from the response since we have been directed
+                _LOGGER.error(f'logging in to {url} using {payload}')
                 res2 = self.session.post(form["action"].replace("/login", res.url), data=payload)
                 res2.raise_for_status()
 
 #            except (AttributeError, KeyError) as err:
             except Exception as err:
-                _LOGGER.error(
-                    "Error processing the <form> tag and subtags (%s). Error: (%s)",
-                    self.host + URL_LOGIN_PAGE,
-                    err,
-                )
+                _LOGGER.error(f"Error processing the <form> tag and subtags ({url}). Error: ({err})")
+
             if local_site:
                 self._get_tokens()
             else:
