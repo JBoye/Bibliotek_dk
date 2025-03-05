@@ -141,6 +141,7 @@ class Library:
 
     def login(self, local_site=False):
         if not self.loggedIn:
+            _LOGGER.error(f'logging in to {self.agency} using local_site: {local_site} (national_site: {self.use_national})')
             if local_site:
                 url = self.host + URL_LOGIN_PAGE
             else:
@@ -211,7 +212,7 @@ class Library:
             'callbackUrl': f'https://bibliotek.dk/?setPickupAgency={self.agency}',
             'json': 'true',
         }
-        res = self.session.post('https://bibliotek.dk/api/auth/signin/adgangsplatformen?agency=710117&force_login=1', json=params, headers=header)
+        res = self.session.post(f'https://bibliotek.dk/api/auth/signin/adgangsplatformen?agency={self.agency}&force_login=1', json=params, headers=header)
         res.raise_for_status()
         return res.json()['url']
 
