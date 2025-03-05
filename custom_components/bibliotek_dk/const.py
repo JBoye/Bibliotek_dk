@@ -40,6 +40,32 @@ ICON = '''<svg fill="none" xmlns="http://www.w3.org/2000/svg" width="24" height=
 </g>
 </svg>'''
 
+details_query = '''
+    query getManifestationViaMaterialByFaust($faust: String!) {
+  manifestation(faust: $faust) {
+    ...ManifestationBasicDetails
+  }
+}
+    
+    fragment ManifestationBasicDetails on Manifestation {
+  pid
+  titles {
+    full
+  }
+  creators {
+    display
+  }
+  cover {
+    thumbnail
+  }
+  materialTypes {
+    materialTypeSpecific {
+      display
+    }
+  }
+}
+'''
+
 status_query = '''
     query BasicUser {
       user {

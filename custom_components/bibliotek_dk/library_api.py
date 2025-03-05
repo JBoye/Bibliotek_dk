@@ -10,7 +10,7 @@ import json
 from .const import (
     HEADERS, JSON_HEADERS,
     URL_LOGIN_PAGE, ICON,
-    status_query
+    status_query, details_query
 )
 DEBUG = True
 
@@ -44,7 +44,7 @@ class Library:
         self.user = libraryUser(userId=userId, pincode=pincode)
         self.user.date = self.user.userId[:-4]
         self.municipality = libraryName
-#        self.icon = ICON
+        self.use_national = False
 
     # The update function is called from the coordinator from Home Assistant
     def update(self):
@@ -54,12 +54,14 @@ class Library:
         # Only one user can login at the time.
 #        self.running = True
 
-        # physical books
-        if self.login(local_site=False):
-            status = self.fetchPhysicalStatus()
-            self.logout()
-            if debt := status['debt']:
-                _LOGGER.error(f"bibliotek.dk debt data: {debt}")
+        status = {'loans': [], 'orders': [], 'debt': []}
+        # physical books from bibliotek.dk
+        if self.use_national:
+            if self.login(local_site=False):
+                status = self.fetchPhysicalStatus()
+                self.logout()
+                if debt := status['debt']:
+                    _LOGGER.error(f"bibliotek.dk debt data: {debt}")
 
         # from local library for ereolen books
         if self.login(local_site=True):
@@ -126,14 +128,11 @@ class Library:
 
     def _getDetails(self, faust):
         data = {}
-        params = {
-            "query": "\n    query getManifestationViaMaterialByFaust($faust: String!) {\n  manifestation(faust: $faust) {\n    ...ManifestationBasicDetails\n  }\n}\n    \n    fragment ManifestationBasicDetails on Manifestation {\n  ...WithLanguages\n  pid\n  titles {\n    full\n  }\n  abstract\n  materialTypes {\n    materialTypeSpecific {\n      display\n    }\n  }\n  creators {\n    display\n  }\n  edition {\n    publicationYear {\n      display\n    }\n  }\n  series {\n    title\n    members {\n      numberInSeries\n    }\n  }\n}\n    \n    fragment WithLanguages on Manifestation {\n  languages {\n    main {\n      display\n      isoCode\n    }\n  }\n}\n    ",
-            "variables": {"faust": faust}
-        }
-        res = self.session.post("https://temp.fbi-api.dbc.dk/next-present/graphql", headers=self.json_header, json=params)
+        params = {"query": details_query, "variables": {"faust": faust}}
+        url = self.urls.get('data-fbi-global-base-url', "https://temp.fbi-api.dbc.dk/next-present/graphql")
+        res = self.session.post(url, headers=self.json_header, json=params)
         if res.status_code == 200:
-            _LOGGER.error(f"getting null details for material: '{faust}'")
-            data = res.json()['data']['manifestation']
+            data = res.json()['data']
         else:
             _LOGGER.error(f"Error getting details for material: '{faust}'")
         return data
@@ -141,11 +140,12 @@ class Library:
     # PRIVATE END  ####
 
     def login(self, local_site=False):
-        if True: # not self.loggedIn:
+        if not self.loggedIn:
             if local_site:
                 url = self.host + URL_LOGIN_PAGE
             else:
                 url = self._get_login_url()
+            print('loggin in to', url)
 
             res = self.session.get(url)
             if res.status_code != 200:
@@ -284,48 +284,47 @@ class Library:
 
     # Get the loans with all possible details
     def fetchLoans(self, physical=[]):
+        res = self.session.get(f'{self.host}/user/me/loans')
+        self.urls = {}
+        if res.status_code == 200:
+            self.urls = {m[0]: m[1] for m in re.findall(r'(data-[a-zA-Z0-9\-\_]+-url)="([^"]*)"', res.text)}
+        url = self.urls.get('data-fbi-global-base-url', "https://temp.fbi-api.dbc.dk/next-present/graphql")
+        _LOGGER.error(f'getting detail info from {url}')
         loans = []
         loansOverdue = []
 
         # Physical books
-        for data in physical:
-            # Create an instance of libraryLoan
-            obj = libraryLoan(data)
+        if self.use_national:
+            for data in physical:
+                # Create an instance of libraryLoan
+                obj = libraryLoan(data)
 
-            # Renewable
-            obj.renewId = data['loanId']
-#            obj.renewAble = material['isRenewable']
+                # Renewable
+                obj.renewId = data['loanId']
+    #            obj.renewAble = material['isRenewable']
+    #            obj.loanDate = parser.parse(material['loanDetails']['loanDate'], ignoretz=True)
+                obj.expireDate = parser.parse(data['dueDate'], ignoretz=True)
+                obj.id = data['manifestation']['pid']
+                loans.append(obj)
+        else:
+            res = self.session.get("https://fbs-openplatform.dbc.dk/external/agencyid/patrons/patronid/loans/v2", headers=self.json_header)
+            if res.status_code == 200:
+                for material in res.json():
+                    id = material['loanDetails']['recordId']
+                    data = self._getDetails(id)
+                    if data:
+#                        data['CoverUrl'] = self._getCoverUrl(data['pid'])
+                        # Create an instance of libraryLoan
+                        obj = libraryLoan(data)
 
-            # Details
-#            obj.loanDate = parser.parse(material['loanDetails']['loanDate'], ignoretz=True)
-            obj.expireDate = parser.parse(data['dueDate'], ignoretz=True)
-            obj.id = data['manifestation']['pid']
-
-            # Add the loan to the stack
-            loans.append(obj)
-        # res = self.session.get("https://fbs-openplatform.dbc.dk/external/agencyid/patrons/patronid/loans/v2", headers=self.json_header)
-        # if res.status_code == 200:
-        #     _LOGGER.error(f'user: ({self.user.date}), physical loans: {len(res.json())}')
-        #     for material in res.json()[:2]:
-        #         faust = material['loanDetails']['recordId']
-        #         data = self._getDetails(faust)
-        #         if data:
-        #             data['CoverUrl'] = self._getCoverUrl(data['pid'])
-
-        #             # Create an instance of libraryLoan
-        #             obj = libraryLoan(data)
-
-        #             # Renewable
-        #             obj.renewId = material['loanDetails']['loanId']
-        #             obj.renewAble = material['isRenewable']
-
-        #             # Details
-        #             obj.loanDate = parser.parse(material['loanDetails']['loanDate'], ignoretz=True)
-        #             obj.expireDate = parser.parse(material['loanDetails']['dueDate'], ignoretz=True)
-        #             obj.id = material['loanDetails']['materialItemNumber']
-
-        #             # Add the loan to the stack
-        #             loans.append(obj)
+                        # Renewable
+                        obj.renewId = material['loanDetails']['loanId']
+                        obj.renewAble = material['isRenewable']
+                        obj.loanDate = parser.parse(material['loanDetails']['loanDate'], ignoretz=True)
+                        obj.expireDate = parser.parse(material['loanDetails']['dueDate'], ignoretz=True)
+                        obj.id = material['loanDetails']['materialItemNumber']
+                        loans.append(obj)
+                _LOGGER.error(f'({self.user.date}) found {len(res.json())} loans, got data for {len(loans)}')
 
         # Ebooks
         res = self.session.get('https://pubhub-openplatform.dbc.dk/v1/user/loans', headers=self.json_header)
@@ -364,54 +363,54 @@ class Library:
         reservationsReady = []
 
         # Physical books
-        for data in physical:
-            _LOGGER.debug(data)
-            if data['status'] == 'AVAILABLE_FOR_PICKUP':
-                obj = libraryReservationReady(data)
-            else:
-                obj = libraryReservation(data)
+        if self.use_national:
+            for data in physical:
+                _LOGGER.debug(data)
+                if data['status'] == 'AVAILABLE_FOR_PICKUP':
+                    obj = libraryReservationReady(data)
+                else:
+                    obj = libraryReservation(data)
 
-            # Details
-            obj.id = data['orderId']
-            obj.createdDate = parser.parse(data['orderDate'], ignoretz=True)
-            obj.pickupLibrary = data['pickUpBranch']['agencyName']
-            if data['status'] == 'AVAILABLE_FOR_PICKUP':
-#                obj.reservationNumber = material['pickupNumber']
-#                obj.pickupDate = parser.parse(material['pickupDeadline'], ignoretz=True)
-                reservationsReady.append(obj)
-            else:
-                if data['pickUpExpiryDate']:
-                    obj.expireDate = parser.parse(data['pickUpExpiryDate'], ignoretz=True)
-                obj.queueNumber = data['holdQueuePosition']
-                reservations.append(obj)
-        # Physical
-        # res = self.session.get("https://fbs-openplatform.dbc.dk/external/v1/agencyid/patrons/patronid/reservations/v2", headers=self.json_header)
-        # materials = {item['transactionId']: item for item in res.json()}  # make sure only to take last if more than one item with same transaction
-        # for material in materials.values():
-        #     # Get the first element (id)
-        #     id = material['recordId']
-        #     data = self._getDetails(id)
-        #     if data:
-        #         data['CoverUrl'] = self._getCoverUrl(data['pid'])
+                # Details
+                obj.id = data['orderId']
+                obj.createdDate = parser.parse(data['orderDate'], ignoretz=True)
+                obj.pickupLibrary = data['pickUpBranch']['agencyName']
+                if data['status'] == 'AVAILABLE_FOR_PICKUP':
+    #                obj.reservationNumber = material['pickupNumber']
+    #                obj.pickupDate = parser.parse(material['pickupDeadline'], ignoretz=True)
+                    reservationsReady.append(obj)
+                else:
+                    if data['pickUpExpiryDate']:
+                        obj.expireDate = parser.parse(data['pickUpExpiryDate'], ignoretz=True)
+                    obj.queueNumber = data['holdQueuePosition']
+                    reservations.append(obj)
+        else:
+            res = self.session.get("https://fbs-openplatform.dbc.dk/external/v1/agencyid/patrons/patronid/reservations/v2", headers=self.json_header)
+            materials = {item['transactionId']: item for item in res.json()}  # make sure only to take last if more than one item with same transaction
+            for material in materials.values():
+                id = material['recordId']
+                data = self._getDetails(id)
+                if data:
+#                    data['CoverUrl'] = self._getCoverUrl(data['pid'])
+                    if material['state'] == 'readyForPickup':
+                        obj = libraryReservationReady(data)
+                    else:
+                        obj = libraryReservation(data)
 
-        #         if material['state'] == 'readyForPickup':
-        #             obj = libraryReservationReady(data)
-        #         else:
-        #             obj = libraryReservation(data)
+                    # Details
+                    obj.id = id
+                    obj.createdDate = parser.parse(material['dateOfReservation'], ignoretz=True)
+                    obj.pickupLibrary = self._branchName(material['pickupBranch'])
+                    if material['state'] == 'readyForPickup':
+                        obj.reservationNumber = material['pickupNumber']
+                        obj.pickupDate = parser.parse(material['pickupDeadline'], ignoretz=True)
+                        reservationsReady.append(obj)
+                    else:
+                        obj.expireDate = parser.parse(material['expiryDate'], ignoretz=True)
+                        obj.queueNumber = material['numberInQueue']
+                        reservations.append(obj)
 
-        #         # Details
-        #         obj.id = id
-        #         obj.createdDate = parser.parse(material['dateOfReservation'], ignoretz=True)
-        #         obj.pickupLibrary = self._branchName(material['pickupBranch'])
-        #         if material['state'] == 'readyForPickup':
-        #             obj.reservationNumber = material['pickupNumber']
-        #             obj.pickupDate = parser.parse(material['pickupDeadline'], ignoretz=True)
-        #             reservationsReady.append(obj)
-        #         else:
-        #             obj.expireDate = parser.parse(material['expiryDate'], ignoretz=True)
-        #             obj.queueNumber = material['numberInQueue']
-        #             reservations.append(obj)
-
+        # eReolen
         res = self.session.get("https://pubhub-openplatform.dbc.dk/v1/user/reservations", headers=self.json_header)
         if res.status_code == 200:
             edata = res.json()
@@ -447,7 +446,7 @@ class Library:
             id = material['recordId']
             data = self._getDetails(id)
             if data:
-                data['CoverUrl'] = self._getCoverUrl(data['pid'])
+#                data['CoverUrl'] = self._getCoverUrl(data['pid'])
                 obj = libraryDebt(data)
 
                 obj.feeDate = parser.parse(debt['creationDate'], ignoretz=True)
