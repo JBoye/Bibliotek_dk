@@ -50,7 +50,6 @@ async def validate_input(
     # Retrieve HOST and UPDATE_INTERVAL
     data[CONF_HOST] = libraries[data[CONF_MUNICIPALITY]][CONF_HOST]
     data[CONF_AGENCY] = libraries[data[CONF_MUNICIPALITY]][CONF_AGENCY]
-    _LOGGER.error(f'{data[CONF_HOST]} {data[CONF_AGENCY]}')
     data[CONF_UPDATE_INTERVAL] = (
         data[CONF_UPDATE_INTERVAL] if data[CONF_UPDATE_INTERVAL] else UPDATE_INTERVAL
     )

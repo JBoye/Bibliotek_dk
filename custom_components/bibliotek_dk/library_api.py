@@ -9,7 +9,7 @@ import json
 
 from .const import (
     HEADERS, JSON_HEADERS,
-    URL_LOGIN_PAGE, ICON,
+    URL_LOGIN_PAGE,
     status_query, details_query
 )
 DEBUG = True
