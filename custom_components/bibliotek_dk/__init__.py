@@ -28,8 +28,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry.data[CONF_USER_ID],
         entry.data[CONF_PINCODE],
         entry.data[CONF_HOST],
+        entry.data[CONF_AGENCY],
         libraryName=entry.data[CONF_MUNICIPALITY],
-        agency=entry.data[CONF_AGENCY],
     )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

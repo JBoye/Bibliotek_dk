@@ -2,12 +2,12 @@
   "domain": "bibliotek_dk",
   "name": "Bibliotek",
   "config_flow": true,
-  "documentation": "https://github.com/J-Lindvig/Bibliotek_dk",
-  "issue_tracker": "https://github.com/J-Lindvig/Bibliotek_dk/issues",
+  "documentation": "https://github.com/TermeHansen/Bibliotek_dk",
+  "issue_tracker": "https://github.com/TermeHansen/Bibliotek_dk/issues",
   "dependencies": [],
   "after_dependencies": [],
-  "codeowners": ["@J-Lindvig"],
+  "codeowners": ["@J-Lindvig", "@TermeHansen"],
   "requirements": ["beautifulsoup4", "html.parser"],
   "iot_class": "cloud_polling",
-  "version": "0.3.9"
+  "version": "0.5.0"
 }

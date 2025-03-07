@@ -18,7 +18,6 @@
           "user_id": "CPR eller lånernummer",
           "pincode": "PIN kode",
           "update_interval": "Opdateringsinterval i minutter",
-          "show_e_library": "Vis eReolen",
           "show_loans": "Vis lån",
           "show_debts": "Vis gebyrer",
           "show_reservations": "Vis reservationer"

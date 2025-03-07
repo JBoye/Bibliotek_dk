@@ -4,7 +4,7 @@ from __future__ import annotations
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import entity_registry as er, selector
+from homeassistant.helpers import selector
 from homeassistant import config_entries
 
 from .library_api import Library
@@ -28,7 +28,6 @@ from .const import (
     CONF_NAME,
     CONF_PINCODE,
     CONF_SHOW_DEBTS,
-    CONF_SHOW_E_LIBRARY,
     CONF_SHOW_LOANS,
     CONF_SHOW_RESERVATIONS,
     CONF_UPDATE_INTERVAL,
@@ -50,20 +49,14 @@ async def validate_input(
 
     # Retrieve HOST and UPDATE_INTERVAL
     data[CONF_HOST] = libraries[data[CONF_MUNICIPALITY]][CONF_HOST]
+    data[CONF_AGENCY] = libraries[data[CONF_MUNICIPALITY]][CONF_AGENCY]
     data[CONF_UPDATE_INTERVAL] = (
         data[CONF_UPDATE_INTERVAL] if data[CONF_UPDATE_INTERVAL] else UPDATE_INTERVAL
     )
 
-    # Add agency for ereolen.dk if boolean is set
-    data[CONF_AGENCY] = (
-        libraries[data[CONF_MUNICIPALITY]][CONF_AGENCY]
-        if data[CONF_SHOW_E_LIBRARY]
-        else None
-    )
-
     # Typecast userId and Pincode to string:
-    data[CONF_USER_ID] = re.sub("\D", "", data[CONF_USER_ID])
-    data[CONF_PINCODE] = re.sub("\D", "", data[CONF_PINCODE])
+    data[CONF_USER_ID] = re.sub(r"\D", "", data[CONF_USER_ID])
+    data[CONF_PINCODE] = re.sub(r"\D", "", data[CONF_PINCODE])
 
     # If there is any other instances of the integration
     if DOMAIN in hass.data:
@@ -77,11 +70,11 @@ async def validate_input(
 
         # If instance is running wait...
         while any(
-            libraryObj.running == True for libraryObj in hass.data[DOMAIN].values()
+            libraryObj.running is True for libraryObj in hass.data[DOMAIN].values()
         ):
             await asyncio.sleep(random.randint(5, 10))
 
-    myLibrary = Library(data[CONF_USER_ID], data[CONF_PINCODE], data[CONF_HOST])
+    myLibrary = Library(data[CONF_USER_ID], data[CONF_PINCODE], data[CONF_HOST], data[CONF_AGENCY])
     # Try to login to test the credentails
     if not await hass.async_add_executor_job(myLibrary.login):
         raise InvalidAuth
@@ -143,7 +136,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             libraries, excLibraries = {}, {}
             if "folk" in librariesJSON.keys():
                 for library in librariesJSON["folk"]:
-                    p = re.compile("^.+?[^\/:](?=[?\/]|$)")
+                    p = re.compile(r"^.+?[^\/:](?=[?\/]|$)")
                     m = p.match(library["registrationUrl"])
                     # Only use libraries NOT using gatewayf
                     if "gatewayf" not in library["registrationUrl"]:
@@ -172,7 +165,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 r.raise_for_status()
 
             except requests.exceptions.HTTPError as err:
-                _LOGGER.error(f"HTTP Error while fetching (%s): {err}",URL_FALLBACK + URL_LOGIN_PAGE)
+                _LOGGER.error(f"HTTP Error while fetching (%s): {err}", URL_FALLBACK + URL_LOGIN_PAGE)
                 # Handle the error as needed, e.g., raise it, log it, or notify the user.
                 return ""
             except requests.exceptions.Timeout:
@@ -182,7 +175,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     "Too many redirects fecthing (%s)", URL_FALLBACK + URL_LOGIN_PAGE
                 )
             except requests.exceptions.RequestException as err:
-                _LOGGER.error(f"Request Exception while fetching (%s): {err}",URL_FALLBACK + URL_LOGIN_PAGE)
+                _LOGGER.error(f"Request Exception while fetching (%s): {err}", URL_FALLBACK + URL_LOGIN_PAGE)
                 return ""
 
             municipality = json.loads(r.text)
@@ -235,7 +228,6 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     ),
                     vol.Required(CONF_USER_ID, default=""): str,
                     vol.Required(CONF_PINCODE, default=""): str,
-                    vol.Required(CONF_SHOW_E_LIBRARY, default=True): bool,
                     vol.Required(CONF_SHOW_LOANS, default=True): bool,
                     #                    vol.Required(CONF_SHOW_LOANS_OVERDUE, default=True): bool,
                     vol.Required(CONF_SHOW_DEBTS, default=True): bool,

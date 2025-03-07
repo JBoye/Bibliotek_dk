@@ -43,7 +43,7 @@ async def async_setup_entry(
         # Only run one instance at a time...
         if DOMAIN in hass.data:
             while any(
-                libraryObj.running == True for libraryObj in hass.data[DOMAIN].values()
+                libraryObj.running is True for libraryObj in hass.data[DOMAIN].values()
             ):
                 waitTime = random.randint(5, 10)
                 _LOGGER.debug(
@@ -120,7 +120,7 @@ class LibrarySensor(SensorEntity):
     @property
     def state(self):
         if len(self.myLibrary.user.loans) > 0:
-            if self.myLibrary.user.loans[0].expireDate is not None: # eReolen reservation in Queue
+            if self.myLibrary.user.loans[0].expireDate is not None:  # eReolen reservation in Queue
                 return (
                     self.myLibrary.user.loans[0].expireDate.date() - datetime.now().date()
                 ).days
@@ -141,20 +141,14 @@ class LibrarySensor(SensorEntity):
             "mail": self.myLibrary.user.mail,
             "mail_notifications": self.myLibrary.user.mailNotify,
             "pickup_library": self.myLibrary.user.pickupLibrary,
+            "ebooks": self.myLibrary.user.eBooks,
+            "ebooks_quota": self.myLibrary.user.eBooksQuota,
+            "audiobooks": self.myLibrary.user.audioBooks,
+            "audiobooks_quota": self.myLibrary.user.audioBooksQuota,
             "sensor_type": "main",
             ATTR_UNIT_OF_MEASUREMENT: "days",
             ATTR_ATTRIBUTION: CREDITS,
         }
-        # If agency is set, bring eReolen
-        if self.myLibrary.agency:
-            attr.update(
-                {
-                    "ebooks": self.myLibrary.user.eBooks,
-                    "ebooks_quota": self.myLibrary.user.eBooksQuota,
-                    "audiobooks": self.myLibrary.user.audioBooks,
-                    "audiobooks_quota": self.myLibrary.user.audioBooksQuota,
-                }
-            )
 
         # PNG as icon/entity-picture
         if self.myLibrary.icon:
