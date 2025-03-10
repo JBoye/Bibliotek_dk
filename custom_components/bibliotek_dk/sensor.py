@@ -9,8 +9,6 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from datetime import timedelta, datetime
-import asyncio
-import random
 import hashlib
 
 from .const import (
@@ -39,19 +37,6 @@ async def async_setup_entry(
 
     # Define a update function
     async def async_update_data():
-
-        # Only run one instance at a time...
-        if DOMAIN in hass.data:
-            while any(
-                libraryObj.running is True for libraryObj in hass.data[DOMAIN].values()
-            ):
-                waitTime = random.randint(5, 10)
-                _LOGGER.debug(
-                    "Instance of Library already running, waiting %s seconds before next probing",
-                    waitTime,
-                )
-                await asyncio.sleep(waitTime)
-
         # Retrieve the client stored in the hass data stack
         myLibrary = hass.data[DOMAIN][entry.entry_id]
         # Call, and wait for it to finish, the function with the refresh procedure

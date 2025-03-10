@@ -11,14 +11,11 @@ from .library_api import Library
 from bs4 import BeautifulSoup as BS
 from typing import Any
 
-import asyncio
 import json
 import logging
-import random
 import re
 import requests
 import voluptuous as vol
-
 
 from .const import (
     CONF_AGENCY,
@@ -67,12 +64,6 @@ async def validate_input(
             for libraryObj in hass.data[DOMAIN].values()
         ):
             raise UserExist
-
-        # If instance is running wait...
-        while any(
-            libraryObj.running is True for libraryObj in hass.data[DOMAIN].values()
-        ):
-            await asyncio.sleep(random.randint(5, 10))
 
     myLibrary = Library(data[CONF_USER_ID], data[CONF_PINCODE], data[CONF_HOST], data[CONF_AGENCY])
     # Try to login to test the credentails
@@ -149,7 +140,6 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             CONF_AGENCY: library[CONF_BRANCH_ID],
                             CONF_HOST: m.group(),
                         }
-
             return libraries, excLibraries
 
         def municipalityFromCoor(lon, lat):
