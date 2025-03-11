@@ -57,6 +57,7 @@ class Library:
 
         # Only fetch user info once
         if not self.user.name:
+            self.login()
             self._branchName(self.agency)
             self.fetchUserInfo()
 
@@ -125,6 +126,7 @@ class Library:
     def login(self):
         if not self.loggedIn:
             url = self.host + URL_LOGIN_PAGE
+            _LOGGER.error("(%s) logging in: %s", self.user.date, url)
 
             res = self.session.get(url)
             if res.status_code != 200:
@@ -156,7 +158,7 @@ class Library:
 
         self._set_tokens()
         if DEBUG:
-            _LOGGER.debug("(%s) is logged in: %s", self.user.userId[:-4], self.loggedIn)
+            _LOGGER.error("(%s) is logged in: %s", self.user.date, self.loggedIn)
         return self.loggedIn
 
     def _set_tokens(self):
@@ -345,23 +347,23 @@ class Library:
 
     # Get debts, if any, from the Library
     def fetchDebts(self, physical=[]):
+        debts = []
         params = {'includepaid': 'false', 'includenonpayable': 'true'}
         res = self.session.get("https://fbs-openplatform.dbc.dk/external/agencyid/patron/patronid/fees/v2", params=params, headers=self.json_header)
         if res.status_code == 200:
             js = res.json()
-        debts = []
-        for debt in js:
-            # TODO more than one material?
-            material = debt['materials'][0]
-            id = material['recordId']
-            data = self._getDetails(id)
-            if data:
-                obj = libraryDebt(data)
+            for debt in js:
+                # TODO more than one material?
+                material = debt['materials'][0]
+                id = material['recordId']
+                data = self._getDetails(id)
+                if data:
+                    obj = libraryDebt(data)
 
-                obj.feeDate = parser.parse(debt['creationDate'], ignoretz=True)
-                obj.feeDueDate = parser.parse(debt['dueDate'], ignoretz=True)
-                obj.feeAmount = debt['amount']
-                debts.append(obj)
+                    obj.feeDate = parser.parse(debt['creationDate'], ignoretz=True)
+                    obj.feeDueDate = parser.parse(debt['dueDate'], ignoretz=True)
+                    obj.feeAmount = debt['amount']
+                    debts.append(obj)
         self.user.debts = debts
         self.user.debtsAmount = sum([float(obj.feeAmount) for obj in debts])
 
