@@ -57,7 +57,6 @@ class Library:
 
         # Only fetch user info once
         if not self.user.name:
-            self.login()
             self._branchName(self.agency)
             self.fetchUserInfo()
 
@@ -126,7 +125,6 @@ class Library:
     def login(self):
         if not self.loggedIn:
             url = self.host + URL_LOGIN_PAGE
-            _LOGGER.error("(%s) logging in: %s", self.user.date, url)
 
             res = self.session.get(url)
             if res.status_code != 200:
@@ -158,7 +156,7 @@ class Library:
 
         self._set_tokens()
         if DEBUG:
-            _LOGGER.error("(%s) is logged in: %s", self.user.date, self.loggedIn)
+            _LOGGER.debug("(%s) is logged in: %s", self.user.date, self.loggedIn)
         return self.loggedIn
 
     def _set_tokens(self):
