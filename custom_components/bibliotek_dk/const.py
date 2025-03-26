@@ -62,134 +62,15 @@ details_query = '''
 }
 '''
 
-status_query = '''
-    query BasicUser {
-      user {
-        name
-        mail
-        address
-        postalCode
-        isCPRValidated
-        loggedInAgencyId
-        loggedInBranchId
-        municipalityAgencyId
-        agencies {
-          id
-          name
-          type
-          hitcount
-          user {
-            mail
-          }
-          result {
-            branchId
-            name
-          }
-        }
-        debt {
-            title
-            amount
-            creator
-            date
-            currency
-            agencyId
-        }
-        loans {
-          agencyId
-          loanId
-          dueDate
-          title
-          creator
-          manifestation {
-            pid
-            ...manifestationTitleFragment
-            ownerWork {
-              workId
-            }
-            creators {
-              ...creatorsFragment
-            }
-            materialTypes {
-              ...materialTypesFragment
-            }
-            cover {
-              thumbnail
-            }
-            recordCreationDate
-          }
-        }
-        orders {
-          orderId
-          status
-          pickUpBranch {
-            agencyName
-            agencyId
-          }
-          pickUpExpiryDate
-          holdQueuePosition
-          creator
-          orderType
-          orderDate
-          title
-          manifestation {
-            pid
-            ...manifestationTitleFragment
-            ownerWork {
-              workId
-            }
-            creators {
-              ...creatorsFragment
-            }
-            materialTypes {
-              ...materialTypesFragment
-            }
-            cover {
-              thumbnail
-            }
-            recordCreationDate
-          }
-        }   
-      }
-    }
-    fragment creatorsFragment on CreatorInterface {
-  ... on Corporation {
-    __typename
-    display
-    nameSort
-    roles {
-      function {
-        plural
-        singular
-      }
-      functionCode
-    }
-  }
-  ... on Person {
-    __typename
-    display
-    nameSort
-    roles {
-      function {
-        plural
-        singular
-      }
-      functionCode
-    }
-  }
-}
-    fragment manifestationTitleFragment on Manifestation {
-  titles {
-    main
-    full
-  }
-}
-    fragment materialTypesFragment on MaterialType {
-  materialTypeGeneral {
-    code
-    display
-  }
-  materialTypeSpecific {
-    code
-    display
-  }
-}'''
+branch_query = '''
+ query LibraryFragmentsSearch($q: String, $limit: PaginationLimitScalar, $offset: Int, $language: LanguageCodeEnum, $agencyId: String, $agencyTypes: [AgencyTypeEnum!]) {
+ branches(q: $q, agencyid: $agencyId, language: $language, limit: $limit, offset: $offset, bibdkExcludeBranches:true, statuses:AKTIVE, agencyTypes: $agencyTypes) {
+ hitcount
+ result {
+   agencyName
+   agencyId
+   branchId
+   name }
+ }
+ }
+'''
