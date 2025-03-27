@@ -49,9 +49,7 @@ class Library:
 
     # The update function is called from the coordinator from Home Assistant
     def update(self):
-        _LOGGER.debug(f"Updating ({self.user.userId[:-4]})")
-        status = {}
-
+        _LOGGER.debug(f"Updating ({self.user.date})")
         status = {'loans': [], 'orders': [], 'debt': []}
 
         # from local library
@@ -290,6 +288,12 @@ class Library:
                         obj.loanDate = parser.parse(material['orderDateUtc'], ignoretz=True)
                         obj.expireDate = parser.parse(material['loanExpireDateUtc'], ignoretz=True)
                         loans.append(obj)
+        else:
+            self.user.eBooks = 0
+            self.user.eBooksQuota = 0
+            self.user.audioBooks = 0
+            self.user.audioBooksQuota = 0
+
         self.user.loans = loans
         self.user.loansOverdue = loansOverdue
 
