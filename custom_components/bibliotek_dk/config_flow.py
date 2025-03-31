@@ -229,11 +229,11 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     ),
                     vol.Required(CONF_USER_ID, default=""): str,
                     vol.Required(CONF_PINCODE, default=""): str,
-                    vol.Required(CONF_SHOW_LOANS, default=True): bool,
-                    vol.Required(CONF_SHOW_ELOANS, default=True): bool,
+                    vol.Optional(CONF_SHOW_LOANS, default=True): bool,
+                    vol.Optional(CONF_SHOW_ELOANS, default=True): bool,
                     #                    vol.Required(CONF_SHOW_LOANS_OVERDUE, default=True): bool,
-                    vol.Required(CONF_SHOW_DEBTS, default=True): bool,
-                    vol.Required(CONF_SHOW_RESERVATIONS, default=True): bool,
+                    vol.Optional(CONF_SHOW_DEBTS, default=True): bool,
+                    vol.Optional(CONF_SHOW_RESERVATIONS, default=True): bool,
                     #                    vol.Required(CONF_SHOW_RESERVATIONS_READY, default=True): bool,
                     vol.Optional(CONF_UPDATE_INTERVAL, default=UPDATE_INTERVAL): int,
                 }
@@ -253,18 +253,19 @@ class OptionsFlow(config_entries.OptionsFlow):
             return self.async_create_entry(
                 title=self.config_entry.title, data=new_data
             )
+        data = self.config_entry.data
+        options_schema = vol.Schema({
+                    vol.Optional(CONF_SHOW_LOANS, default=data[CONF_SHOW_LOANS]): bool,
+                    vol.Optional(CONF_SHOW_ELOANS, default=data[CONF_SHOW_ELOANS]): bool,
+                    vol.Optional(CONF_SHOW_DEBTS, default=data[CONF_SHOW_DEBTS]): bool,
+                    vol.Optional(CONF_SHOW_RESERVATIONS, default=data[CONF_SHOW_RESERVATIONS]): bool,
+                    vol.Optional(CONF_UPDATE_INTERVAL, default=data[CONF_UPDATE_INTERVAL]): int,
+                })
+
         return self.async_show_form(
-            data_schema=self.add_suggested_values_to_schema(
-                vol.Schema({
-                    vol.Required(CONF_SHOW_LOANS, default=True): bool,
-                    vol.Required(CONF_SHOW_ELOANS, default=True): bool,
-                    vol.Required(CONF_SHOW_DEBTS, default=True): bool,
-                    vol.Required(CONF_SHOW_RESERVATIONS, default=True): bool,
-                    vol.Optional(CONF_UPDATE_INTERVAL, default=UPDATE_INTERVAL): int,
-                }),
-                self.config_entry.options
+            step_id="init",
+            data_schema=self.add_suggested_values_to_schema(options_schema, self.config_entry.options)
             )
-        )
 
 
 class gatewayf(HomeAssistantError):

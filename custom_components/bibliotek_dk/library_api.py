@@ -22,9 +22,10 @@ _LOGGER = logging.getLogger(__name__)
 class Library:
     host, libraryName, icon, user = None, None, None, None
     loggedIn = False
+    use_eReolen, get_loans, get_reservations, get_depts = True, True, True, True
 
     def __init__(
-        self, userId: str, pincode: str, host: str, agency: str, libraryName=None, use_eReolen=True
+        self, userId: str, pincode: str, host: str, agency: str, libraryName=None
     ) -> None:
 
         self.session = requests.Session()
@@ -45,14 +46,11 @@ class Library:
         self.user = libraryUser(userId=userId, pincode=pincode)
         self.user.date = self.user.userId[:-4]
         self.municipality = libraryName
-        self.use_eReolen = use_eReolen
 
     # The update function is called from the coordinator from Home Assistant
     def update(self):
-        _LOGGER.debug(f"Updating ({self.user.date})")
+        _LOGGER.debug(f"Updating ({self.user.date}) {self.use_eReolen}, {self.get_loans}, {self.get_reservations}, {self.get_depts}")
         status = {'loans': [], 'orders': [], 'debt': []}
-
-        # from local library
 
         # Only fetch user info once
         if not self.user.name:
@@ -60,12 +58,12 @@ class Library:
             self.fetchUserInfo()
 
         # Fetch the states of the user
-        self.fetchLoans(status['loans'])
-        self.fetchReservations(status['orders'])
-        self.fetchDebts(status['debt'])
-
-        # Logout
-#        self.logout()
+        if self.get_loans:
+            self.fetchLoans(status['loans'])
+        if self.get_reservations:
+            self.fetchReservations(status['orders'])
+        if self.get_depts:
+            self.fetchDebts(status['debt'])
 
         # Sort the lists
         self.sortLists()
