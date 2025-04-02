@@ -256,7 +256,7 @@ class OptionsFlow(config_entries.OptionsFlow):
         data = self.config_entry.data
         options_schema = vol.Schema({
                     vol.Optional(CONF_SHOW_LOANS, default=data[CONF_SHOW_LOANS]): bool,
-                    vol.Optional(CONF_SHOW_ELOANS, default=data[CONF_SHOW_ELOANS]): bool,
+                    vol.Optional(CONF_SHOW_ELOANS, default=data.get(CONF_SHOW_ELOANS, True)): bool,
                     vol.Optional(CONF_SHOW_DEBTS, default=data[CONF_SHOW_DEBTS]): bool,
                     vol.Optional(CONF_SHOW_RESERVATIONS, default=data[CONF_SHOW_RESERVATIONS]): bool,
                     vol.Optional(CONF_UPDATE_INTERVAL, default=data[CONF_UPDATE_INTERVAL]): int,
