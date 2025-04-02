@@ -67,16 +67,16 @@ async def async_setup_entry(
     sensors.append(LibrarySensor(myLibrary, coordinator))
 
     # Loans
-    if new_data[CONF_SHOW_LOANS]:
+    if True:  # new_data[CONF_SHOW_LOANS]:
         sensors.append(LoanSensor(myLibrary.user, coordinator))
         sensors.append(LoanOverdueSensor(myLibrary.user, coordinator))
 
     # Debts
-    if new_data[CONF_SHOW_DEBTS]:
+    if True:  # new_data[CONF_SHOW_DEBTS]:
         sensors.append(DebtSensor(myLibrary.user, coordinator))
 
     # Reservations
-    if new_data[CONF_SHOW_RESERVATIONS]:
+    if True:  # new_data[CONF_SHOW_RESERVATIONS]:
         sensors.append(ReservationSensor(myLibrary.user, coordinator))
         sensors.append(ReservationReadySensor(myLibrary.user, coordinator))
 
