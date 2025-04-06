@@ -22,6 +22,7 @@ _LOGGER = logging.getLogger(__name__)
 class Library:
     host, libraryName, icon, user = None, None, None, None
     loggedIn = False
+    use_eReolen, get_loans, get_reservations, get_depts = True, True, True, True
 
     def __init__(
         self, userId: str, pincode: str, host: str, agency: str, libraryName=None
@@ -48,12 +49,7 @@ class Library:
 
     # The update function is called from the coordinator from Home Assistant
     def update(self):
-        _LOGGER.debug(f"Updating ({self.user.userId[:-4]})")
-        status = {}
-
-        status = {'loans': [], 'orders': [], 'debt': []}
-
-        # from local library
+        _LOGGER.debug(f"Updating ({self.user.date}) {self.use_eReolen}, {self.get_loans}, {self.get_reservations}, {self.get_depts}")
 
         # Only fetch user info once
         if not self.user.name:
@@ -61,12 +57,12 @@ class Library:
             self.fetchUserInfo()
 
         # Fetch the states of the user
-        self.fetchLoans(status['loans'])
-        self.fetchReservations(status['orders'])
-        self.fetchDebts(status['debt'])
-
-        # Logout
-#        self.logout()
+        if self.get_loans:
+            self.fetchLoans()
+        if self.get_reservations:
+            self.fetchReservations()
+        if self.get_depts:
+            self.fetchDebts()
 
         # Sort the lists
         self.sortLists()
@@ -242,7 +238,7 @@ class Library:
                 _LOGGER.error(f"Error getting user info {self.user.dat}. Error: {err}")
 
     # Get the loans with all possible details
-    def fetchLoans(self, physical=[]):
+    def fetchLoans(self):
         loans = []
         loansOverdue = []
 
@@ -267,32 +263,39 @@ class Library:
                     else:
                         loans.append(obj)
         # Ebooks
-        res = self.session.get('https://pubhub-openplatform.dbc.dk/v1/user/loans', headers=self.json_header)
-        if res.status_code == 200:
-            edata = res.json()
+        if self.use_eReolen:
+            res = self.session.get('https://pubhub-openplatform.dbc.dk/v1/user/loans', headers=self.json_header)
+            if res.status_code == 200:
+                edata = res.json()
 
-            self.user.eBooks = edata['userData']['totalEbookLoans']
-            self.user.eBooksQuota = edata['libraryData']['maxConcurrentEbookLoansPerBorrower']
-            self.user.audioBooks = edata['userData']['totalAudioLoans']
-            self.user.audioBooksQuota = edata['libraryData']['maxConcurrentAudiobookLoansPerBorrower']
+                self.user.eBooks = edata['userData']['totalEbookLoans']
+                self.user.eBooksQuota = edata['libraryData']['maxConcurrentEbookLoansPerBorrower']
+                self.user.audioBooks = edata['userData']['totalAudioLoans']
+                self.user.audioBooksQuota = edata['libraryData']['maxConcurrentAudiobookLoansPerBorrower']
 
-            for material in edata['loans']:
-                id = material['libraryBook']['identifier']
-                res2 = self.session.get(f'https://pubhub-openplatform.dbc.dk/v1/products/{id}', headers=self.json_header)
-                if res2.status_code == 200:
-                    data = res2.json()['product']
-                    obj = libraryLoan(data)
+                for material in edata['loans']:
+                    id = material['libraryBook']['identifier']
+                    res2 = self.session.get(f'https://pubhub-openplatform.dbc.dk/v1/products/{id}', headers=self.json_header)
+                    if res2.status_code == 200:
+                        data = res2.json()['product']
+                        obj = libraryLoan(data)
 
-                    # Details
-                    obj.id = id
-                    obj.loanDate = parser.parse(material['orderDateUtc'], ignoretz=True)
-                    obj.expireDate = parser.parse(material['loanExpireDateUtc'], ignoretz=True)
-                    loans.append(obj)
+                        # Details
+                        obj.id = id
+                        obj.loanDate = parser.parse(material['orderDateUtc'], ignoretz=True)
+                        obj.expireDate = parser.parse(material['loanExpireDateUtc'], ignoretz=True)
+                        loans.append(obj)
+        else:
+            self.user.eBooks = 0
+            self.user.eBooksQuota = 0
+            self.user.audioBooks = 0
+            self.user.audioBooksQuota = 0
+
         self.user.loans = loans
         self.user.loansOverdue = loansOverdue
 
     # Get the current reservations
-    def fetchReservations(self, physical=[]):
+    def fetchReservations(self):
         reservations = []
         reservationsReady = []
 
@@ -322,29 +325,30 @@ class Library:
                     reservations.append(obj)
 
         # eReolen
-        res = self.session.get("https://pubhub-openplatform.dbc.dk/v1/user/reservations", headers=self.json_header)
-        if res.status_code == 200:
-            edata = res.json()
-            for material in edata['reservations']:
-                _LOGGER.debug(f"E-reol reservering data {material}")
-                id = material['identifier']
-                res2 = self.session.get(f'https://pubhub-openplatform.dbc.dk/v1/products/{id}', headers=self.json_header)
-                if res2.status_code == 200:
-                    data = res2.json()['product']
-                    _LOGGER.debug(f"E-reol reservering data {res.json()}")
+        if self.use_eReolen:
+            res = self.session.get("https://pubhub-openplatform.dbc.dk/v1/user/reservations", headers=self.json_header)
+            if res.status_code == 200:
+                edata = res.json()
+                for material in edata['reservations']:
+                    _LOGGER.debug(f"E-reol reservering data {material}")
+                    id = material['identifier']
+                    res2 = self.session.get(f'https://pubhub-openplatform.dbc.dk/v1/products/{id}', headers=self.json_header)
+                    if res2.status_code == 200:
+                        data = res2.json()['product']
+                        _LOGGER.debug(f"E-reol reservering data {res.json()}")
 
-                    obj = libraryReservation(data)
-                    obj.id = id
+                        obj = libraryReservation(data)
+                        obj.id = id
 
-                    obj.expireDate = parser.parse(material['expectedRedeemDateUtc'])
-                    obj.createdDate = parser.parse(material['createdDateUtc'])
-                    obj.pickupLibrary = 'ereolen.dk'
-                    reservations.append(obj)
+                        obj.expireDate = parser.parse(material['expectedRedeemDateUtc'])
+                        obj.createdDate = parser.parse(material['createdDateUtc'])
+                        obj.pickupLibrary = 'ereolen.dk'
+                        reservations.append(obj)
         self.user.reservations = reservations
         self.user.reservationsReady = reservationsReady
 
     # Get debts, if any, from the Library
-    def fetchDebts(self, physical=[]):
+    def fetchDebts(self):
         debts = []
         params = {'includepaid': 'false', 'includenonpayable': 'true'}
         res = self.session.get("https://fbs-openplatform.dbc.dk/external/agencyid/patron/patronid/fees/v2", params=params, headers=self.json_header)
