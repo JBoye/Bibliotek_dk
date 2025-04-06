@@ -50,7 +50,6 @@ class Library:
     # The update function is called from the coordinator from Home Assistant
     def update(self):
         _LOGGER.debug(f"Updating ({self.user.date}) {self.use_eReolen}, {self.get_loans}, {self.get_reservations}, {self.get_depts}")
-        status = {'loans': [], 'orders': [], 'debt': []}
 
         # Only fetch user info once
         if not self.user.name:
@@ -59,11 +58,11 @@ class Library:
 
         # Fetch the states of the user
         if self.get_loans:
-            self.fetchLoans(status['loans'])
+            self.fetchLoans()
         if self.get_reservations:
-            self.fetchReservations(status['orders'])
+            self.fetchReservations()
         if self.get_depts:
-            self.fetchDebts(status['debt'])
+            self.fetchDebts()
 
         # Sort the lists
         self.sortLists()
@@ -239,7 +238,7 @@ class Library:
                 _LOGGER.error(f"Error getting user info {self.user.dat}. Error: {err}")
 
     # Get the loans with all possible details
-    def fetchLoans(self, physical=[]):
+    def fetchLoans(self):
         loans = []
         loansOverdue = []
 
@@ -296,7 +295,7 @@ class Library:
         self.user.loansOverdue = loansOverdue
 
     # Get the current reservations
-    def fetchReservations(self, physical=[]):
+    def fetchReservations(self):
         reservations = []
         reservationsReady = []
 
@@ -349,7 +348,7 @@ class Library:
         self.user.reservationsReady = reservationsReady
 
     # Get debts, if any, from the Library
-    def fetchDebts(self, physical=[]):
+    def fetchDebts(self):
         debts = []
         params = {'includepaid': 'false', 'includenonpayable': 'true'}
         res = self.session.get("https://fbs-openplatform.dbc.dk/external/agencyid/patron/patronid/fees/v2", params=params, headers=self.json_header)
