@@ -269,6 +269,7 @@ class Library:
                         # Details
                         obj.id = id
                         obj.loanDate = parser.parse(material['orderDateUtc'], ignoretz=True)
+                        obj.order_id = material['orderId']
                         obj.expireDate = parser.parse(material['loanExpireDateUtc'], ignoretz=True)
                         loans.append(obj)
         else:
@@ -398,6 +399,7 @@ class libraryMaterial:
 class libraryLoan(libraryMaterial):
     loanDate, expireDate = None, None
     renewId, renewAble = None, None
+    orderId = None
 
 
 class libraryReservation(libraryMaterial):

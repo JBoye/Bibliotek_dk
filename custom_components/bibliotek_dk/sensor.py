@@ -214,6 +214,7 @@ class LoanSensor(SensorEntity):
                     "loan_date": loan.loanDate,
                     "expire_date": loan.expireDate,
                     "renewable": loan.renewAble,
+                    "order_id": loan.orderId,
                     "url": loan.url,
                     "cover": loan.coverUrl,
                 }
