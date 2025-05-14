@@ -269,7 +269,7 @@ class Library:
                         # Details
                         obj.id = id
                         obj.loanDate = parser.parse(material['orderDateUtc'], ignoretz=True)
-                        obj.order_id = material['orderId']
+                        obj.orderId = material['orderId']
                         obj.expireDate = parser.parse(material['loanExpireDateUtc'], ignoretz=True)
                         loans.append(obj)
         else:
