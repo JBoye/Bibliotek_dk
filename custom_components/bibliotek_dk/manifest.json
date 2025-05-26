@@ -4,7 +4,7 @@
   "config_flow": true,
   "documentation": "https://github.com/TermeHansen/Bibliotek_dk",
   "issue_tracker": "https://github.com/TermeHansen/Bibliotek_dk/issues",
-  "dependencies": [],
+  "dependencies": ["media_source"],
   "after_dependencies": [],
   "codeowners": ["@J-Lindvig", "@TermeHansen"],
   "requirements": ["beautifulsoup4", "html.parser"],

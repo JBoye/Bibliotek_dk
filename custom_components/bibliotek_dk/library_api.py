@@ -22,7 +22,7 @@ _LOGGER = logging.getLogger(__name__)
 class Library:
     host, libraryName, icon, user = None, None, None, None
     loggedIn = False
-    use_eReolen, get_loans, get_reservations, get_depts = True, True, True, True
+    # use_eReolen, get_loans, get_reservations, get_depts = True, True, True, True
 
     def __init__(
         self, userId: str, pincode: str, host: str, agency: str, libraryName=None
