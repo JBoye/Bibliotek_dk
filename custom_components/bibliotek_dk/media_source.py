@@ -27,10 +27,6 @@ class BibliotekMediaSource(MediaSource):
         entries = self.hass.data.get(DOMAIN, {}).get("entries", {})
         identifier = item.identifier
 
-        _LOGGER.debug("🟦 Browsing item: %s", identifier)
-        _LOGGER.debug("🟦 Available entry IDs: %s", list(entries.keys()))
-
-        # Top-level directory
         if identifier is None:
             children = [
                 BrowseMediaSource(
@@ -57,63 +53,36 @@ class BibliotekMediaSource(MediaSource):
 
         if "|" in identifier:
             entry_id, slug = identifier.split("|", 1)
-            is_book_item = True
+            raise ValueError("Cannot expand individual book item")
         else:
             entry_id = identifier
-            is_book_item = False
 
         entry = entries.get(entry_id)
-
-        # Logging
-        _LOGGER.debug("🟦 Raw entry object: %s", entry)
-        _LOGGER.debug("🟦 Type of entry: %s", type(entry))
-
-        try:
-            library = entry["library"]
-        except (KeyError, TypeError):
-            _LOGGER.warning("Missing or invalid 'library' for entry %s", entry_id)
+        if not entry or "library" not in entry:
             raise ValueError(f"'library' in entry '{entry_id}' is not valid")
 
-        _LOGGER.debug("📦 library type: %s from module: %s", type(library), type(library).__module__)
-        _LOGGER.debug("🔍 library dir: %s", dir(library))
+        library = entry["library"]
 
-        if not hasattr(library, "get_loans") or not callable(library.get_loans):
-            raise ValueError(f"'get_loans' in entry '{entry_id}' is not callable")
-
-        # ✅ Only now reject direct book expansion
-        if is_book_item:
-            raise ValueError("Cannot expand individual book item")
-
-        # 🔥 This should now run!
         try:
-            loans = library.get_loans()
-            _LOGGER.debug("📚 get_loans() returned %d items", len(loans))
+            loans = library.get_audiobooks()
         except Exception as e:
-            _LOGGER.exception("💥 Failed to call get_loans() on library for entry %s: %s", entry_id, e)
+            _LOGGER.exception("Failed to retrieve loans for entry %s: %s", entry_id, e)
             raise ValueError(f"Could not retrieve loans for entry '{entry_id}'")
-        _LOGGER.debug("📚 get_loans() returned %d items", len(loans))
-        children = []
 
-        for book in loans:
-            _LOGGER.debug("📖 Book: %s", book)
-            if not book.get("order_id"):
-                continue
-
-            title = book.get("title", "Untitled")
-            slug = slugify(title)
-            children.append(
-                BrowseMediaSource(
-                    domain=self.domain,
-                    identifier=f"{entry_id}|{slug}",
-                    title=title,
-                    media_class="music",
-                    media_content_type="audio/mpeg",
-                    can_play=True,
-                    can_expand=False,
-                    thumbnail=book.get("cover"),
-                    artist=book.get("creator"),
-                )
+        children = [
+            BrowseMediaSource(
+                domain=self.domain,
+                identifier=f"{entry_id}|{slugify(book.get('title', 'Untitled'))}",
+                title=book.get("title", "Untitled"),
+                media_class="music",
+                media_content_type="audio/mpeg",
+                can_play=True,
+                can_expand=False,
+                thumbnail=book.get("cover"),
             )
+            for book in loans
+            if book.get("order_id")
+        ]
 
         return BrowseMediaSource(
             domain=self.domain,
@@ -127,7 +96,7 @@ class BibliotekMediaSource(MediaSource):
         )
 
     async def async_resolve_media(self, item: MediaSourceItem) -> dict:
-        """Resolve an audiobook item to a local MP3 file."""
+        _LOGGER.debug("Resolving media for item: %s", item)
         try:
             entry_id, slug = item.identifier.split("|", 1)
         except ValueError:
@@ -139,7 +108,7 @@ class BibliotekMediaSource(MediaSource):
             raise ValueError(f"Entry '{entry_id}' not found or invalid")
 
         library = entry["library"]
-        loans = library.get_loans()
+        loans = library.get_audiobooks()
         book = next(
             (b for b in loans if b.get("order_id") and slugify(b.get("title")) == slug),
             None,
@@ -147,8 +116,12 @@ class BibliotekMediaSource(MediaSource):
 
         if not book:
             raise ValueError(f"Book not found for slug: {slug}")
+        
+
 
         filename = f"{slug}.mp3"
+
+        _LOGGER.debug("Resolved filename: %s", filename)
         return {
             "mime_type": "audio/mpeg",
             "url": f"/media/local/{filename}",

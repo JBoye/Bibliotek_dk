@@ -163,6 +163,18 @@ class Library:
                 self._user_token = res.text.split('"user"')[1].split('"')[1]
                 self._user_token_exp = datetime.now() + timedelta(days=7)
 
+    def get_audiobooks(self):
+        return [
+            {
+                "title": loan.title,
+                "creator": loan.creators,
+                "cover": loan.coverUrl,
+                "order_id": getattr(loan, "orderId", None),
+            }
+            for loan in self.user.loans
+            if getattr(loan, "orderId", None)
+        ]
+
     @property
     def json_header(self):
         self._json_header["Authorization"] = f"Bearer {self.user_token}"
