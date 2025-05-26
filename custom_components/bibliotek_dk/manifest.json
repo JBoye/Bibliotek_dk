@@ -4,10 +4,10 @@
   "config_flow": true,
   "documentation": "https://github.com/TermeHansen/Bibliotek_dk",
   "issue_tracker": "https://github.com/TermeHansen/Bibliotek_dk/issues",
-  "dependencies": [],
+  "dependencies": ["media_source"],
   "after_dependencies": [],
-  "codeowners": ["@J-Lindvig", "@TermeHansen"],
+  "codeowners": ["@J-Lindvig", "@TermeHansen", "@JBoye"],
   "requirements": ["beautifulsoup4", "html.parser"],
   "iot_class": "cloud_polling",
-  "version": "0.5.3"
+  "version": "0.6.0"
 }

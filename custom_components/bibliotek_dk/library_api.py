@@ -22,7 +22,7 @@ _LOGGER = logging.getLogger(__name__)
 class Library:
     host, libraryName, icon, user = None, None, None, None
     loggedIn = False
-    use_eReolen, get_loans, get_reservations, get_depts = True, True, True, True
+    # use_eReolen, get_loans, get_reservations, get_depts = True, True, True, True
 
     def __init__(
         self, userId: str, pincode: str, host: str, agency: str, libraryName=None
@@ -162,6 +162,18 @@ class Library:
                 self.loggedIn = self.host + '/logout'
                 self._user_token = res.text.split('"user"')[1].split('"')[1]
                 self._user_token_exp = datetime.now() + timedelta(days=7)
+
+    def get_audiobooks(self):
+        return [
+            {
+                "title": loan.title,
+                "creator": loan.creators,
+                "cover": loan.coverUrl,
+                "order_id": getattr(loan, "orderId", None),
+            }
+            for loan in self.user.loans
+            if getattr(loan, "orderId", None)
+        ]
 
     @property
     def json_header(self):
