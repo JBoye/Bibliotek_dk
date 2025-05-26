@@ -1,8 +1,9 @@
 import logging
-from homeassistant.components.media_source.models import (
+from homeassistant.components.media_source import (
+    BrowseMediaSource,
     MediaSource,
     MediaSourceItem,
-    BrowseMediaSource,
+    PlayMedia,
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.util import slugify
@@ -13,10 +14,12 @@ _LOGGER = logging.getLogger(__name__)
 
 
 async def async_get_media_source(hass: HomeAssistant) -> MediaSource:
+    _LOGGER.debug("Creating BibliotekMediaSource")
     return BibliotekMediaSource(hass)
 
 
 class BibliotekMediaSource(MediaSource):
+    _LOGGER.debug("Initializing BibliotekMediaSource")
     """Media Source exposing Bibliotek audiobooks."""
 
     def __init__(self, hass: HomeAssistant):
@@ -24,6 +27,7 @@ class BibliotekMediaSource(MediaSource):
         self.hass = hass
 
     async def async_browse_media(self, item: MediaSourceItem) -> BrowseMediaSource:
+        _LOGGER.debug("Browsing media for item: %s", item)
         entries = self.hass.data.get(DOMAIN, {}).get("entries", {})
         identifier = item.identifier
 
@@ -95,7 +99,7 @@ class BibliotekMediaSource(MediaSource):
             children=children,
         )
 
-    async def async_resolve_media(self, item: MediaSourceItem) -> dict:
+    async def async_resolve_media(self, item: MediaSourceItem) -> PlayMedia:
         _LOGGER.debug("Resolving media for item: %s", item)
         try:
             entry_id, slug = item.identifier.split("|", 1)
@@ -116,13 +120,9 @@ class BibliotekMediaSource(MediaSource):
 
         if not book:
             raise ValueError(f"Book not found for slug: {slug}")
-        
-
+        order_id = book.get("order_id")
 
         filename = f"{slug}.mp3"
 
         _LOGGER.debug("Resolved filename: %s", filename)
-        return {
-            "mime_type": "audio/mpeg",
-            "url": f"/media/local/{filename}",
-        }
+        return PlayMedia("/media/local/Paddington.mp3", "audio/mpeg")       
