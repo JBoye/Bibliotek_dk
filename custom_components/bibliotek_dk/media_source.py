@@ -1,4 +1,6 @@
 import logging
+import os
+import subprocess
 from homeassistant.components.media_source import (
     BrowseMediaSource,
     MediaSource,
@@ -120,9 +122,30 @@ class BibliotekMediaSource(MediaSource):
 
         if not book:
             raise ValueError(f"Book not found for slug: {slug}")
+
         order_id = book.get("order_id")
+        _LOGGER.debug("Resolved order_id: %s", order_id)
 
-        filename = f"{slug}.mp3"
+        output_dir = self.hass.data[DOMAIN]["audio_dir"]
+        output_path = os.path.join(output_dir, f"{order_id}.mp3")
 
-        _LOGGER.debug("Resolved filename: %s", filename)
-        return PlayMedia("/media/local/Paddington.mp3", "audio/mpeg")       
+        if not os.path.isfile(output_path):
+            os.makedirs(output_dir, exist_ok=True)
+            stream_url = f"https://audio.api.streaming.pubhub.dk/v1/stream/hls/{order_id}/playlist.m3u8"
+            command = [
+                "ffmpeg",
+                "-i", stream_url,
+                "-vn",
+                output_path
+            ]
+            try:
+                subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                _LOGGER.info("Downloaded audiobook to: %s", output_path)
+            except subprocess.CalledProcessError as e:
+                _LOGGER.error("FFmpeg failed: %s", e.stderr.decode())
+                raise ValueError("Failed to download audio")
+
+        return PlayMedia(
+            url=f"/bibliotek_dk/audio/{order_id}.mp3",
+            mime_type="audio/mpeg",
+        )

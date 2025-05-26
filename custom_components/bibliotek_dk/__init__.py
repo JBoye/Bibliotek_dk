@@ -20,6 +20,26 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 PLATFORMS = [Platform.SENSOR]
 
+import os
+import tempfile
+from homeassistant.components.http import HomeAssistantView
+
+class BibliotekAudioView(HomeAssistantView):
+    url = "/bibliotek_dk/audio/{order_id}.mp3"
+    name = "bibliotek_dk:audio"
+    requires_auth = True
+
+    def __init__(self, directory):
+        self._directory = directory
+
+    async def get(self, request, order_id):
+        from aiohttp import web
+        file_path = os.path.join(self._directory, f"{order_id}.mp3")
+        if not os.path.isfile(file_path):
+            return web.Response(status=404, text="Audio file not found")
+        return web.FileResponse(path=file_path, headers={"Content-Type": "audio/mpeg"})
+
+
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Bibliotek from a config entry."""
@@ -41,6 +61,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "library": library,
         "title": display_name,
     }
+
+    temp_audio_dir = os.path.join(tempfile.gettempdir(), "bibliotek_dk_audio")
+    os.makedirs(temp_audio_dir, exist_ok=True)
+
+    hass.http.register_view(BibliotekAudioView(temp_audio_dir))
+    hass.data[DOMAIN]["audio_dir"] = temp_audio_dir
+
 
     # Legacy path for sensor support (optional)
     hass.data[DOMAIN][entry.entry_id] = library
