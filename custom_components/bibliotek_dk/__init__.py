@@ -6,6 +6,8 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 
+from .media_source import BibliotekAudioView
+
 from .library_api import Library
 
 from .const import (
@@ -22,24 +24,6 @@ PLATFORMS = [Platform.SENSOR]
 
 import os
 import tempfile
-from homeassistant.components.http import HomeAssistantView
-
-class BibliotekAudioView(HomeAssistantView):
-    url = "/bibliotek_dk/audio/{order_id}.mp3"
-    name = "bibliotek_dk:audio"
-    requires_auth = True
-
-    def __init__(self, directory):
-        self._directory = directory
-
-    async def get(self, request, order_id):
-        from aiohttp import web
-        file_path = os.path.join(self._directory, f"{order_id}.mp3")
-        if not os.path.isfile(file_path):
-            return web.Response(status=404, text="Audio file not found")
-        return web.FileResponse(path=file_path, headers={"Content-Type": "audio/mpeg"})
-
-
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Bibliotek from a config entry."""
