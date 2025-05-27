@@ -1,6 +1,8 @@
 import logging
 import os
 import subprocess
+
+from homeassistant.components.http import HomeAssistantView
 from homeassistant.components.media_source import (
     BrowseMediaSource,
     MediaSource,
@@ -14,16 +16,11 @@ from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
-
 async def async_get_media_source(hass: HomeAssistant) -> MediaSource:
-    _LOGGER.debug("Creating BibliotekMediaSource")
-    return BibliotekMediaSource(hass)
+    return EreolenMediaSource(hass)
 
 
-class BibliotekMediaSource(MediaSource):
-    _LOGGER.debug("Initializing BibliotekMediaSource")
-    """Media Source exposing Bibliotek audiobooks."""
-
+class EreolenMediaSource(MediaSource):
     def __init__(self, hass: HomeAssistant):
         super().__init__(DOMAIN)
         self.hass = hass
@@ -130,6 +127,8 @@ class BibliotekMediaSource(MediaSource):
         output_path = os.path.join(output_dir, f"{order_id}.mp3")
 
         if not os.path.isfile(output_path):
+            _LOGGER.debug("Starting download: %s", output_path)
+
             os.makedirs(output_dir, exist_ok=True)
             stream_url = f"https://audio.api.streaming.pubhub.dk/v1/stream/hls/{order_id}/playlist.m3u8"
             command = [
@@ -146,6 +145,23 @@ class BibliotekMediaSource(MediaSource):
                 raise ValueError("Failed to download audio")
 
         return PlayMedia(
-            url=f"/bibliotek_dk/audio/{order_id}.mp3",
+            url=f"/bibliotek_dk/ereolen/{order_id}.mp3",
             mime_type="audio/mpeg",
         )
+    
+class EreolenServer(HomeAssistantView):
+    url = "/bibliotek_dk/ereolen/{order_id}.mp3"
+    name = "bibliotek_dk:ereolen"
+    requires_auth = True
+
+    def __init__(self, directory):
+        self._directory = directory
+
+    async def get(self, request, order_id):
+        from aiohttp import web
+        file_path = os.path.join(self._directory, f"{order_id}.mp3")
+        if not os.path.isfile(file_path):
+            return web.Response(status=404, text="Audio file not found")
+        return web.FileResponse(path=file_path, headers={"Content-Type": "audio/mpeg"})
+
+
